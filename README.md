@@ -114,9 +114,6 @@ minikube image load calculadora:1.0
 minikube image load calculadora:2.0
 ```
 
-> **Nota:** este cluster usa `containerd` como runtime, así que **no** sirve `minikube docker-env`
-> (ese atajo solo funciona con el runtime `docker`). `minikube image load` funciona en cualquier
-> caso. Se puede verificar con `minikube image ls`.
 
 En los Deployments se usa `imagePullPolicy: IfNotPresent` para que Kubernetes use la imagen local y
 no intente descargarla de Docker Hub.
@@ -186,24 +183,6 @@ Salida:
 
 ### Paso 5 — Validar green antes de darle tráfico
 
-Este es el punto central de blue/green: green ya está desplegado y se puede probar **sin que ningún
-usuario lo esté usando todavía**. Se accede directo al Deployment, sin pasar por el Service:
-
-```bash
-kubectl port-forward deploy/calculadora-green 8001:8000
-```
-
-En otra terminal:
-
-```bash
-curl "http://127.0.0.1:8001/raiz?a=9"
-```
-
-```
-{"operacion":"raiz","resultado":3.0,"version":"2.0","color":"green"}
-```
-
-Mientras tanto, el Service sigue devolviendo la v1. Recién con el smoke test aprobado se conmuta.
 
 ### Paso 6 — Switch blue -> green
 
@@ -215,11 +194,6 @@ Todo el despliegue se reduce a cambiar el selector del Service.
 kubectl patch service calculadora -p '{\"spec\":{\"selector\":{\"app\":\"calculadora\",\"version\":\"green\"}}}'
 ```
 
-
-
-> En PowerShell hay que escapar las comillas dobles. Sin escapar, kubectl devuelve
-> `Error from server (BadRequest): invalid JSON patch`.
-
 Consultando **la misma URL de antes**, sin reiniciar ni redesplegar nada:
 
 ```
@@ -227,13 +201,6 @@ Consultando **la misma URL de antes**, sin reiniciar ni redesplegar nada:
 {"operacion":"raiz","resultado":3.0,"version":"2.0","color":"green"}
 ```
 
-El corte es sin downtime: los pods de green ya estaban `Running` y habían pasado la readiness probe
-antes del switch, así que no hay que esperar a que arranque nada.
-
-> El cambio tarda **uno o dos segundos** en propagarse: kube-proxy tiene que reprogramar las reglas
-> de ruteo del nodo después de que cambian los endpoints del Service. Un `curl` disparado en el mismo
-> instante que el `patch` todavía puede caer en la versión anterior. Se puede confirmar el estado
-> real con `kubectl get endpointslice -l kubernetes.io/service-name=calculadora`.
 
 ### Paso 7 — Rollback
 
@@ -242,11 +209,6 @@ Si se detecta un error en producción con la v2, el rollback es el mismo patch a
 ```bash
 kubectl patch service calculadora -p '{\"spec\":{\"selector\":{\"app\":\"calculadora\",\"version\":\"blue\"}}}'
 ```
-
-El tráfico vuelve a la v1 en cuestión de segundos, porque el entorno blue nunca se dio de baja. Esa
-es la ventaja principal de blue/green frente a un rolling update, donde el rollback (`kubectl
-rollout undo`) implica volver a levantar los pods de la versión anterior y lleva bastante más
-tiempo.
 
 ### Paso 8 — Limpieza
 
