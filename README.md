@@ -237,3 +237,63 @@ kubectl delete -f k8s/
 
 - **`replicas: 2` en cada entorno.** Suficiente para mostrar que el Service balancea entre varios
   pods, sin consumir recursos de más en un cluster local.
+
+---
+
+## 6. CI/CD — Pipeline de GitHub Actions (Entrega 2)
+
+El workflow [.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml) construye
+las imágenes de la aplicación y las publica en DockerHub automáticamente.
+
+**Se dispara** con cada `push` a la branch `entrega2`, y también a mano desde la pestaña *Actions*
+de GitHub (`workflow_dispatch`).
+
+**Qué hace**, para cada una de las dos versiones en paralelo:
+
+1. `actions/checkout@v4` — baja el código del repo al runner.
+2. `docker/setup-buildx-action@v3` — habilita Buildx, que es lo que usa el paso de build.
+3. `docker/login-action@v3` — se autentica contra DockerHub con los secrets del repositorio.
+4. `docker/build-push-action@v6` — construye la imagen desde el `Dockerfile` de esa versión y la
+   sube.
+
+**Imágenes que publica:**
+
+| Build context | Tag publicado                    |
+|---------------|----------------------------------|
+| `app/v1`      | `<usuario>/calculadora:1.0`      |
+| `app/v2`      | `<usuario>/calculadora:2.0`      |
+
+### Por qué un `matrix` y no un build único
+
+El proyecto necesita **las dos imágenes disponibles al mismo tiempo**, porque el despliegue
+blue/green de la sección 4 corre v1 y v2 en paralelo en el cluster. Un `strategy.matrix` recorre las
+dos carpetas con los mismos cuatro pasos, en dos jobs paralelos.
+
+La consecuencia práctica es que agregar una versión futura es **agregar una entrada a la lista**,
+sin tocar los pasos ni mover archivos entre carpetas:
+
+```yaml
+strategy:
+  matrix:
+    include:
+      - path: app/v1
+        tag: "1.0"
+      - path: app/v2
+        tag: "2.0"
+```
+
+Se descartó la alternativa de mantener una carpeta `latest/` con la versión vigente y archivar las
+anteriores: el historial de versiones ya lo provee git, y blue/green necesita construir las dos
+versiones activamente, con lo cual ninguna es realmente un "archivo".
+
+### Configuración requerida
+
+Dos *repository secrets* en GitHub (Settings → Secrets and variables → Actions):
+
+| Secret                | Valor                                            |
+|-----------------------|--------------------------------------------------|
+| `DOCKERHUB_USERNAME`  | usuario de DockerHub                             |
+| `DOCKERHUB_TOKEN`     | *Access Token* de DockerHub (no la contraseña)   |
+
+> En los logs de Actions el nombre de la imagen aparece como `***/calculadora:1.0`: GitHub enmascara
+> automáticamente todo valor que provenga de un secret. Es el comportamiento esperado, no un error.
