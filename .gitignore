@@ -1,0 +1,57 @@
+ppt/*
+ppt/
+# ---- Claude Code / asistentes ----
+.claude/
+.cursor/
+.aider*
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Variables de ambiente y secretos ----
+# Los valores de configuracion van en k8s/configmap.yaml, no en archivos .env
+.env
+.env.*
+*.local
+kubeconfig
+*.kubeconfig
+
+# ---- Editores / IDEs ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- Sistema operativo ----
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
+*:Zone.Identifier
+# macOS
+.DS_Store
+# Linux
+.directory
+
+# ---- Logs y temporales ----
+*.log
+tmp/
+temp/
+
+# ---- Material de la cátedra ----
+# Las diapositivas y la consigna son material del curso, no del entregable.
+# Sacar estas lineas si se quiere versionarlos junto al codigo.
+*.pptx
+*.pdf

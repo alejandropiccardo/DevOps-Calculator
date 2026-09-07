@@ -1,0 +1,50 @@
+# Entorno GREEN: version 2.0 de la calculadora (agrega la raiz cuadrada).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calculadora-green
+  labels:
+    app: calculadora
+    version: green
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: calculadora
+      version: green
+  template:
+    metadata:
+      labels:
+        app: calculadora
+        version: green
+    spec:
+      containers:
+        - name: calculadora
+          image: calculadora:2.0
+          # La imagen se carga a mano en minikube, nunca se busca en un registry.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: calc-config-green
+          # El Service solo enruta trafico a los pods que pasan la readiness.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi

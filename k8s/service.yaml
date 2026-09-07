@@ -1,0 +1,17 @@
+# Unico punto de entrada estable. El switch blue/green consiste en cambiar
+# el valor de spec.selector.version entre "blue" y "green".
+apiVersion: v1
+kind: Service
+metadata:
+  name: calculadora
+  labels:
+    app: calculadora
+spec:
+  type: NodePort
+  selector:
+    app: calculadora
+    version: blue
+  ports:
+    - port: 80
+      targetPort: 8000
+      nodePort: 30080

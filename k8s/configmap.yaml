@@ -1,0 +1,23 @@
+# Configuracion de cada entorno. Los valores se inyectan como variables de
+# ambiente en los contenedores, para no hardcodearlos en el codigo.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calc-config-blue
+  labels:
+    app: calculadora
+    version: blue
+data:
+  APP_VERSION: "1.0"
+  APP_COLOR: "blue"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calc-config-green
+  labels:
+    app: calculadora
+    version: green
+data:
+  APP_VERSION: "2.0"
+  APP_COLOR: "green"

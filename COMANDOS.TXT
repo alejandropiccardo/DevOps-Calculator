@@ -1,0 +1,20 @@
+kubectl apply -f k8s/configmap.yaml -f k8s/deployment-blue.yaml -f k8s/service.yaml
+
+en otra terminal
+minikube service calculadora --url
+
+$U = "http://127.0.0.1:60995"
+con la url que devuelve
+
+curl.exe -s "$U/suma?a=2&b=2"
+
+curl.exe -s -w "  HTTP %{http_code}" "$U/raiz?a=9"
+
+Desplegar v2
+
+kubectl apply -f k8s/deployment-green.yaml
+
+SWITCH
+kubectl patch service calculadora -p '{\"spec\":{\"selector\":{\"app\":\"calculadora\",\"version\":\"green\"}}}'
+
+curl.exe -s "$U/raiz?a=9"
