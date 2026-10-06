@@ -17,10 +17,15 @@ spec:
       labels:
         app: calculadora
         version: blue
+      annotations:
+        # Prometheus descubre los pods por estas anotaciones (ver prometheus.yaml).
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: calculadora
-          image: calculadora:1.0
+          image: calculadora:1.1
           # La imagen se carga a mano en minikube, nunca se busca en un registry.
           imagePullPolicy: IfNotPresent
           ports:

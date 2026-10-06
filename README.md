@@ -15,8 +15,8 @@ mover el `selector` del Service de un entorno al otro.
 
 | Entorno   | Imagen            | Versión | Operaciones                            |
 |-----------|-------------------|---------|----------------------------------------|
-| **blue**  | `calculadora:1.0` | 1.0     | suma, resta, multiplicación, división  |
-| **green** | `calculadora:2.0` | 2.0     | idem + raíz cuadrada     |
+| **blue**  | `calculadora:1.1` | 1.1     | suma, resta, multiplicación, división  |
+| **green** | `calculadora:2.1` | 2.1     | idem + raíz cuadrada     |
 
 El cambio mínimo entre versiones es el agregado del endpoint `/raiz`. Todos los endpoints de la v1 siguen funcionando igual en la v2.
 
@@ -26,6 +26,7 @@ El cambio mínimo entre versiones es el agregado del endpoint `/raiz`. Todos los
 |--------|---------------------------|-----------|------------|--------------------------------------|
 | GET    | `/`                       | sí        | sí         | Versión, color y operaciones activas |
 | GET    | `/health`                 | sí        | sí         | Usado por las probes de Kubernetes   |
+| GET    | `/metrics`                | sí        | sí         | Métricas en formato Prometheus       |
 | GET    | `/suma?a=2&b=3`           | sí        | sí         | a + b                                |
 | GET    | `/resta?a=5&b=2`          | sí        | sí         | a - b                                |
 | GET    | `/multiplicacion?a=3&b=4` | sí        | sí         | a * b                                |
@@ -36,7 +37,7 @@ Toda respuesta incluye los campos `version` y `color`, así se ve al instante qu
 atendiendo el pedido:
 
 ```json
-{"operacion":"suma","resultado":5.0,"version":"1.0","color":"blue"}
+{"operacion":"suma","resultado":5.0,"version":"1.1","color":"blue"}
 ```
 
 ---
@@ -56,9 +57,15 @@ Entrega1/
 │       └── Dockerfile
 ├── k8s/
 │   ├── configmap.yaml          # configuración de cada entorno
-│   ├── deployment-blue.yaml    # Deployment blue  -> calculadora:1.0
-│   ├── deployment-green.yaml   # Deployment green -> calculadora:2.0
+│   ├── deployment-blue.yaml    # Deployment blue  -> calculadora:1.1
+│   ├── deployment-green.yaml   # Deployment green -> calculadora:2.1
 │   └── service.yaml            # Service NodePort con selector conmutable
+├── monitoring/                 # Entrega 2
+│   ├── prometheus.yaml         # RBAC + config + reglas de alerta + Deployment + Service
+│   ├── grafana.yaml            # Secret + provisioning + Deployment + Service
+│   └── grafana-dashboard.yaml  # el dashboard en JSON
+├── scripts/
+│   └── generar-carga.ps1       # genera trafico para disparar las alertas
 └── README.md
 ```
 
@@ -94,11 +101,11 @@ kubectl get nodes
 Desde la carpeta `Entrega1/`:
 
 ```bash
-docker build -t calculadora:1.0 app/v1
+docker build -t calculadora:1.1 app/v1
 ```
 
 ```bash
-docker build -t calculadora:2.0 app/v2
+docker build -t calculadora:2.1 app/v2
 ```
 
 ### Paso 2 — Cargar las imágenes en minikube
@@ -107,11 +114,11 @@ minikube corre en su propio nodo y no ve las imágenes del Docker local, por lo 
 cargarlas explícitamente:
 
 ```bash
-minikube image load calculadora:1.0
+minikube image load calculadora:1.1
 ```
 
 ```bash
-minikube image load calculadora:2.0
+minikube image load calculadora:2.1
 ```
 
 
@@ -169,8 +176,8 @@ curl "http://127.0.0.1:59493/raiz?a=9"
 Salida:
 
 ```
-{"app":"calculadora","version":"1.0","color":"blue","operaciones":["suma","resta","multiplicacion","division"]}
-{"operacion":"suma","resultado":5.0,"version":"1.0","color":"blue"}
+{"app":"calculadora","version":"1.1","color":"blue","operaciones":["suma","resta","multiplicacion","division"]}
+{"operacion":"suma","resultado":5.0,"version":"1.1","color":"blue"}
 {"detail":"Not Found"}
 ```
 
@@ -197,8 +204,8 @@ kubectl patch service calculadora -p '{\"spec\":{\"selector\":{\"app\":\"calcula
 Consultando **la misma URL de antes**, sin reiniciar ni redesplegar nada:
 
 ```
-{"app":"calculadora","version":"2.0","color":"green","operaciones":["suma","resta","multiplicacion","division","raiz"]}
-{"operacion":"raiz","resultado":3.0,"version":"2.0","color":"green"}
+{"app":"calculadora","version":"2.1","color":"green","operaciones":["suma","resta","multiplicacion","division","raiz"]}
+{"operacion":"raiz","resultado":3.0,"version":"2.1","color":"green"}
 ```
 
 
@@ -237,3 +244,154 @@ kubectl delete -f k8s/
 
 - **`replicas: 2` en cada entorno.** Suficiente para mostrar que el Service balancea entre varios
   pods, sin consumir recursos de más en un cluster local.
+
+---
+
+## 6. Monitoreo y alertas (Entrega 2)
+
+La calculadora expone métricas en `/metrics`, Prometheus las recolecta y evalúa dos reglas de
+alerta, y Grafana las muestra en un dashboard. **No se usa Alertmanager**: las alertas se visualizan,
+no se notifican (ver "Alcance" más abajo).
+
+```
+┌──────────────┐  /metrics   ┌────────────────────────┐  consulta   ┌─────────┐
+│ calculadora  │ ──────────> │ Prometheus             │ ──────────> │ Grafana │
+│ (4 pods)     │  cada 15 s  │  · guarda las métricas │             │         │
+└──────────────┘             │  · evalúa las reglas   │             └─────────┘
+                             │  · publica ALERTS{...} │
+                             └────────────────────────┘
+```
+
+### Métricas expuestas
+
+| Métrica | Tipo | Labels | Qué cuenta |
+|---|---|---|---|
+| `calculadora_operaciones_total` | Counter | `operacion`, `version` | operaciones resueltas correctamente |
+| `calculadora_errores_total` | Counter | `operacion`, `motivo`, `version` | operaciones rechazadas por entrada inválida |
+
+Los `motivo` posibles son `division_por_cero`, `raiz_negativa` y `parametro_invalido` (este último
+lo levanta un `exception_handler` de `RequestValidationError`, porque FastAPI valida los tipos
+*antes* de entrar al endpoint y ese rechazo nunca pasa por el código de la operación).
+
+> **Qué cuenta como "operación inválida":** la operación existe pero el input no es válido. Un 404
+> (por ejemplo `/raiz` contra la v1) **no** se cuenta: ahí el endpoint no existe, que es un problema
+> distinto. La decisión está tomada a propósito para que la alerta no se dispare por escaneos o
+> URLs mal tipeadas.
+
+Prometheus agrega además la label `entorno` (`blue`/`green`) tomada de la label del pod. Se llama
+distinto que `version` (`1.1`/`2.1`) a propósito, para que no colisionen.
+
+### Reglas de alerta
+
+Viven en el ConfigMap `prometheus-config`, dentro de `monitoring/prometheus.yaml`:
+
+| Alerta | Expresión | Severidad |
+|---|---|---|
+| `DemasiadasOperaciones` | `sum(increase(calculadora_operaciones_total[5m])) > 20` | warning |
+| `DemasiadasOperacionesInvalidas` | `sum(increase(calculadora_errores_total[5m])) > 5` | critical |
+
+Las dos tienen `for: 30s`, así que primero pasan a `Pending` y recién después a `Firing`.
+
+Desarmando la primera, que es literalmente la consigna ("X operaciones en Y minutos"):
+
+- `increase(...[5m])` — cuánto creció el contador en los últimos **5 minutos** (la Y)
+- `sum(...)` — agrega las réplicas y los tipos de operación en un solo número
+- `> 20` — el umbral (la X)
+
+Cambiar X o Y es editar esa línea del ConfigMap y volver a aplicar.
+
+### Dashboard de Grafana
+
+Seis paneles, provisionados por ConfigMap (no hay que configurar nada a mano):
+
+1. **Estado de las alertas** — *state timeline* sobre `ALERTS{...}`, muestra la franja pasando a
+   `pending` y después a `firing`.
+2. **Ventana de la alerta: operaciones** — la expresión exacta de la alerta, con línea de umbral en 20.
+3. **Ventana de la alerta: inválidas** — ídem, desglosada por `motivo`, umbral en 5.
+4. **Operaciones por minuto**
+5. **Por tipo de operación**
+6. **Por entorno (blue/green)** — al conmutar el Service de la sección 4, el tráfico salta de una
+   serie a la otra.
+
+### Despliegue
+
+Los pasos 1 a 3 de la sección 4 no cambian, salvo que las imágenes ahora son `1.1` y `2.1` (la
+instrumentación cambió el contenido de la imagen, así que cambió el tag). Después:
+
+```bash
+kubectl apply -f monitoring/
+```
+
+```bash
+kubectl rollout status deploy/prometheus
+```
+
+```bash
+kubectl rollout status deploy/grafana
+```
+
+Accesos (cada uno necesita su propia terminal con el túnel abierto):
+
+```bash
+minikube service prometheus --url
+```
+
+```bash
+minikube service grafana --url
+```
+
+Grafana pide usuario y contraseña: **`admin` / `devops2026`**, que salen del Secret `grafana-admin`.
+
+### Demo
+
+1. Verificar que Prometheus encontró los pods: en su UI, **Status → Targets**, tienen que figurar
+   los 4 pods de la calculadora en `UP`.
+2. Generar carga:
+
+```bash
+.\scripts\generar-carga.ps1 -Url http://127.0.0.1:<puerto-del-tunel>
+```
+
+3. En Prometheus → **Alerts**: las dos alertas pasan a `Pending` y ~30 s después a `Firing`.
+4. En Grafana: la franja de estado se pone roja y las curvas cruzan la línea de umbral.
+
+> **Importante:** generá la carga *después* de que Prometheus haya hecho al menos un scrape.
+> `increase()` mide el crecimiento **entre muestras**: si el contador ya estaba alto la primera vez
+> que Prometheus lo vio, no hay crecimiento que medir y la alerta nunca salta. Es el error más fácil
+> de cometer al probar esto.
+
+### Decisiones técnicas
+
+- **El contador va dentro de `resultado()`.** Esa función ya era el único punto por el que pasaban
+  las cinco operaciones, así que una sola línea instrumenta todo. Los errores usan el mismo patrón
+  con `rechazar()`.
+
+- **RBAC para Prometheus.** `ServiceAccount` + `ClusterRole` + `ClusterRoleBinding` con permisos de
+  lectura sobre pods, services y endpoints. Sin esto, Prometheus no puede consultar la API de
+  Kubernetes y no descubre ningún target.
+
+- **Descubrimiento por anotaciones.** Los pods llevan `prometheus.io/scrape: "true"` y Prometheus
+  filtra por esa anotación con `relabel_configs`. La alternativa era listar las IPs a mano, que se
+  rompe en cuanto un pod se reinicia.
+
+- **Un `Secret` para la clave de Grafana**, en vez de ponerla en el Deployment. En un proyecto real
+  ese archivo no se versionaría; acá la contraseña es de demo y está documentada a propósito.
+
+- **Sin Alertmanager.** Alertmanager se ocupa de *rutear y entregar* notificaciones (mail, Slack,
+  PagerDuty). Como el requerimiento era visualizar, Prometheus alcanza: publica el estado de cada
+  alerta como la métrica `ALERTS`, que Grafana consulta igual que cualquier otra.
+
+- **`emptyDir` para los datos de Prometheus.** Las métricas se pierden si el pod se reinicia.
+  Alcanza para la demo; en producción iría un `PersistentVolume`.
+
+### Alcance
+
+Esta entrega cubre **detección y visualización** de alertas. No cubre **notificación**: nadie recibe
+un mensaje cuando una alerta salta. Agregarlo es sumar un `monitoring/alertmanager.yaml` y un bloque
+`alerting:` en la configuración de Prometheus apuntando a él.
+
+### Nota sobre `increase()`
+
+Los valores pueden salir con decimales: `30.3` operaciones en vez de `30`. No es un error de la
+instrumentación — `increase()` **extrapola** sobre los bordes de la ventana cuando las muestras no
+caen justo en los extremos. Es el comportamiento documentado de Prometheus para contadores.
