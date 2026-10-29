@@ -58,10 +58,13 @@ spec:
       labels:
         app: grafana
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsUser: 472
         runAsNonRoot: true
         fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: grafana
           image: grafana/grafana:11.5.0
@@ -85,6 +88,14 @@ spec:
               mountPath: /etc/grafana/provisioning/dashboards
             - name: dashboards
               mountPath: /var/lib/grafana/dashboards
+            # Con el root filesystem en read-only, los unicos lugares donde
+            # Grafana puede escribir son estos emptyDir.
+            - name: datos
+              mountPath: /var/lib/grafana
+            - name: logs
+              mountPath: /var/log/grafana
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /api/health
@@ -98,7 +109,18 @@ spec:
             limits:
               cpu: 500m
               memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
       volumes:
+        - name: datos
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
         - name: provisioning-datasources
           configMap:
             name: grafana-provisioning

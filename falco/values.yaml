@@ -1,0 +1,29 @@
+# Values para el chart oficial de Falco (falcosecurity/falco 9.2.1 -> Falco 0.45.1).
+#
+#   helm install falco falco --repo https://falcosecurity.github.io/charts \
+#     --version 9.2.1 -n falco --create-namespace -f falco/values.yaml
+
+driver:
+  # modern_ebpf no necesita compilar un modulo de kernel ni headers: usa
+  # CO-RE/BTF, que el kernel de WSL2 (el que usa minikube con el driver docker
+  # en Windows) ya trae. Con "auto" el chart a veces intenta el modulo y falla.
+  kind: modern_ebpf
+
+# Sin tty, la salida de Falco se bufferea y las alertas tardan en aparecer en
+# "kubectl logs". Con tty: true se ven en el momento.
+tty: true
+
+falco:
+  # Formato JSON: cada alerta es una linea con regla, prioridad, pod, comando...
+  json_output: true
+  json_include_output_property: true
+
+# Falco corre como DaemonSet privilegiado (necesita ver las syscalls del nodo).
+# Por eso el namespace "falco" esta excluido de las politicas de Kyverno.
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1024Mi

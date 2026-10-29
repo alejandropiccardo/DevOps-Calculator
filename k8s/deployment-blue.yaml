@@ -23,9 +23,31 @@ spec:
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
+      # La app no usa la API de Kubernetes: no se monta el token del SA.
+      automountServiceAccountToken: false
+      # Requerido por la politica kyverno/politicas/03-prohibir-root.yaml.
+      # 10001 es el UID que crea el Dockerfile.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Reparte las replicas en nodos distintos cuando los hay. Es "preferred"
+      # para que en minikube (un solo nodo) igual se puedan programar.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: calculadora
+                    version: blue
       containers:
         - name: calculadora
-          image: calculadora:1.1
+          image: calculadora:1.2
           # La imagen se carga a mano en minikube, nunca se busca en un registry.
           imagePullPolicy: IfNotPresent
           ports:
@@ -53,3 +75,10 @@ spec:
             limits:
               cpu: 250m
               memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            # La app no escribe a disco: si alguien logra ejecutar codigo
+            # adentro, no puede bajar ni modificar archivos.
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

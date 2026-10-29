@@ -1,0 +1,32 @@
+# Evento de Falco - Entrega 3
+# Fecha: 2026-10-27 20:10  |  imagen: docker.io/falcosecurity/falco:0.45.1  |  driver: modern_ebpf  |  chart falcosecurity/falco 9.2.1  |  horas de las alertas en UTC
+#
+# Accion sospechosa: abrir una shell interactiva dentro de un pod de la
+# calculadora:
+#     kubectl exec -it <pod-calculadora> -- sh
+#
+# Regla que dispara: "Terminal shell in container" (falco_rules.yaml, prioridad
+# Notice). Detecta un proceso shell con una terminal (tty) asociada que nace
+# del runtime del contenedor, que es justamente lo que hace kubectl exec -it.
+#
+# Se registraron dos eventos:
+#   1) pod blue: shell con una lista de comandos (id, hostname, cat /etc/shadow).
+#      Notar que 'cat /etc/shadow' fallo con Permission denied porque el
+#      contenedor corre como UID 10001 (politica 3 de Kyverno), asi que Falco
+#      no tuvo que disparar 'Read sensitive file untrusted'.
+#   2) pod green: shell interactiva pura (proc.cmdline = sh).
+#
+# Comando para ver las alertas:
+#     kubectl -n falco logs ds/falco -c falco | grep "Terminal shell"
+#
+# Se filtraron solo los eventos de los pods de la calculadora: en minikube con
+# driver docker, Falco ve todo el kernel de WSL2 y registra tambien eventos de
+# otros contenedores de Docker Desktop que no son parte de este trabajo.
+
+# ---- Alertas (formato legible) ----
+23:09:49.650505022: Notice A shell was spawned in a container with an attached terminal | evt_type=execve user=<NA> user_uid=10001 user_loginuid=-1 process=sh proc_exepath=/bin/busybox parent=<NA> command=sh -c id; hostname; cat /etc/shadow; wget -q -O- http://example.com >/dev/null; exit 0 terminal=34816 exe_flags=EXE_LOWER_LAYER container_id=46d52d75519e container_name=k8s_calculadora_calculadora-blue-88644cc88-clj2c_default_80a4258f-0408-4e64-819e-f06a95029d7a_0 container_image_repository=calculadora container_image_tag=1.2 k8s_pod_name=calculadora-blue-88644cc88-clj2c k8s_ns_name=default
+23:10:27.286317164: Notice A shell was spawned in a container with an attached terminal | evt_type=execve user=<NA> user_uid=10001 user_loginuid=-1 process=sh proc_exepath=/bin/busybox parent=<NA> command=sh terminal=34816 exe_flags=EXE_LOWER_LAYER container_id=52f18d62b7b4 container_name=k8s_calculadora_calculadora-green-5c9b6ccd8d-k6htr_default_c1eecd5c-381b-412d-962e-f5d6a54e9d6a_0 container_image_repository=calculadora container_image_tag=2.2 k8s_pod_name=calculadora-green-5c9b6ccd8d-k6htr k8s_ns_name=default
+
+# ---- Alertas (JSON tal como las emite Falco) ----
+{"hostname":"minikube","output":"23:09:49.650505022: Notice A shell was spawned in a container with an attached terminal | evt_type=execve user=<NA> user_uid=10001 user_loginuid=-1 process=sh proc_exepath=/bin/busybox parent=<NA> command=sh -c id; hostname; cat /etc/shadow; wget -q -O- http://example.com >/dev/null; exit 0 terminal=34816 exe_flags=EXE_LOWER_LAYER container_id=46d52d75519e container_name=k8s_calculadora_calculadora-blue-88644cc88-clj2c_default_80a4258f-0408-4e64-819e-f06a95029d7a_0 container_image_repository=calculadora container_image_tag=1.2 k8s_pod_name=calculadora-blue-88644cc88-clj2c k8s_ns_name=default","output_fields":{"container.id":"46d52d75519e","container.image.repository":"calculadora","container.image.tag":"1.2","container.name":"k8s_calculadora_calculadora-blue-88644cc88-clj2c_default_80a4258f-0408-4e64-819e-f06a95029d7a_0","evt.arg.flags":"EXE_LOWER_LAYER","evt.time":1793142589650505022,"evt.type":"execve","k8s.ns.name":"default","k8s.pod.name":"calculadora-blue-88644cc88-clj2c","proc.cmdline":"sh -c id; hostname; cat /etc/shadow; wget -q -O- http://example.com >/dev/null; exit 0","proc.exepath":"/bin/busybox","proc.name":"sh","proc.pname":null,"proc.tty":34816,"user.loginuid":-1,"user.name":"<NA>","user.uid":10001},"priority":"Notice","rule":"Terminal shell in container","source":"syscall","tags":["T1059","container","maturity_stable","mitre_execution","shell"],"time":"2026-10-27T23:09:49.650505022Z"}
+{"hostname":"minikube","output":"23:10:27.286317164: Notice A shell was spawned in a container with an attached terminal | evt_type=execve user=<NA> user_uid=10001 user_loginuid=-1 process=sh proc_exepath=/bin/busybox parent=<NA> command=sh terminal=34816 exe_flags=EXE_LOWER_LAYER container_id=52f18d62b7b4 container_name=k8s_calculadora_calculadora-green-5c9b6ccd8d-k6htr_default_c1eecd5c-381b-412d-962e-f5d6a54e9d6a_0 container_image_repository=calculadora container_image_tag=2.2 k8s_pod_name=calculadora-green-5c9b6ccd8d-k6htr k8s_ns_name=default","output_fields":{"container.id":"52f18d62b7b4","container.image.repository":"calculadora","container.image.tag":"2.2","container.name":"k8s_calculadora_calculadora-green-5c9b6ccd8d-k6htr_default_c1eecd5c-381b-412d-962e-f5d6a54e9d6a_0","evt.arg.flags":"EXE_LOWER_LAYER","evt.time":1793142627286317164,"evt.type":"execve","k8s.ns.name":"default","k8s.pod.name":"calculadora-green-5c9b6ccd8d-k6htr","proc.cmdline":"sh","proc.exepath":"/bin/busybox","proc.name":"sh","proc.pname":null,"proc.tty":34816,"user.loginuid":-1,"user.name":"<NA>","user.uid":10001},"priority":"Notice","rule":"Terminal shell in container","source":"syscall","tags":["T1059","container","maturity_stable","mitre_execution","shell"],"time":"2026-10-27T23:10:27.286317164Z"}

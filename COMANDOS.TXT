@@ -18,3 +18,49 @@ SWITCH
 kubectl patch service calculadora -p '{\"spec\":{\"selector\":{\"app\":\"calculadora\",\"version\":\"green\"}}}'
 
 curl.exe -s "$U/raiz?a=9"
+
+
+==================== ENTREGA 3 (DevSecOps) ====================
+
+minikube start --cpus=4 --memory=6144
+
+docker build -t calculadora:1.2 app/v1
+docker build -t calculadora:2.2 app/v2
+minikube image load calculadora:1.2
+minikube image load calculadora:2.2
+
+CODIGO
+pip-audit -r app/v2/requirements.txt
+docker run --rm -v "${PWD}:/src" -w /src semgrep/semgrep:1.181.1 semgrep scan --config p/python --config p/dockerfile --config p/kubernetes --config p/secrets --config p/security-audit --metrics=off app k8s monitoring
+
+IMAGEN
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.1 image --severity HIGH,CRITICAL calculadora:2.2
+
+KYVERNO
+kubectl create -f https://github.com/kyverno/kyverno/releases/download/v1.19.2/install.yaml
+kubectl -n kyverno rollout status deploy/kyverno-admission-controller
+kubectl apply -f kyverno/politicas/
+kubectl get validatingpolicies
+
+kubectl apply -f kyverno/pruebas/no-conforme.yaml
+(tiene que dar 4 errores "denied the request")
+kubectl apply -f kyverno/pruebas/conforme.yaml
+(este si se crea)
+kubectl delete pod prueba-conforme
+
+kubectl apply -f k8s/ -f monitoring/
+(los manifiestos del proyecto cumplen las politicas)
+
+KUBELINTER
+docker run --rm -v "${PWD}:/src" -w /src stackrox/kube-linter:v0.8.3 lint k8s monitoring
+
+FALCO
+helm install falco falco --repo https://falcosecurity.github.io/charts --version 9.2.1 -n falco --create-namespace -f falco/values.yaml
+kubectl -n falco rollout status ds/falco
+
+kubectl get pods -l app=calculadora
+kubectl exec -it <pod> -- sh
+(adentro: whoami, cat /etc/shadow, exit)
+
+en otra terminal
+kubectl -n falco logs ds/falco -c falco | Select-String "Terminal shell"

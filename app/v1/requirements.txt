@@ -1,3 +1,7 @@
-fastapi==0.115.6
-uvicorn==0.34.0
-prometheus-client==0.21.1
+fastapi==0.162.0
+# starlette es dependencia de fastapi; se fija explicitamente para que una
+# version vulnerable no pueda colarse por la resolucion transitiva (ver
+# reports/npm-audit.txt).
+starlette==1.10.0
+uvicorn==0.54.0
+prometheus-client==0.26.0

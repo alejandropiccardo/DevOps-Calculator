@@ -1,0 +1,64 @@
+# Manifiestos NO conformes, para comprobar que Kyverno los rechaza.
+# Cada Pod viola una sola politica, para ver el mensaje de cada una por
+# separado; el Deployment del final las viola las tres juntas.
+#
+#   kubectl apply -f kyverno/pruebas/no-conforme.yaml
+#
+# Resultado esperado: los cuatro objetos rechazados por el admission webhook.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: prueba-latest
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+  containers:
+    - name: app
+      image: calculadora:latest          # <- viola la politica 1
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: prueba-sin-recursos
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+  containers:
+    - name: app
+      image: calculadora:2.2
+      # <- viola la politica 2: no declara requests ni limits
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: prueba-root
+spec:
+  containers:
+    - name: app
+      image: calculadora:2.2
+      securityContext:
+        runAsUser: 0                     # <- viola la politica 3
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prueba-todo-mal
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: prueba-todo-mal }
+  template:
+    metadata:
+      labels: { app: prueba-todo-mal }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx                   # sin tag = latest, sin recursos, root

@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 import os
 
-APP_VERSION = os.getenv("APP_VERSION", "1.1")
+APP_VERSION = os.getenv("APP_VERSION", "1.2")
 APP_COLOR = os.getenv("APP_COLOR", "blue")
 
 OPERACIONES = ["suma", "resta", "multiplicacion", "division"]

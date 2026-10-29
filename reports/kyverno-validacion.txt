@@ -1,0 +1,44 @@
+# Validacion de las politicas de Kyverno - Entrega 3
+# Fecha: 2026-10-27 20:07  |  Kyverno v1.19.2  |  Kubernetes v1.35.1 (minikube)
+
+## 1. Politicas instaladas
+$ kubectl get validatingpolicies.policies.kyverno.io
+NAME                     AGE    READY
+exigir-requests-limits   7m3s   true
+prohibir-root            7m3s   true
+prohibir-tag-latest      7m3s   true
+
+## 2. Manifiesto NO conforme: tiene que ser rechazado
+#  Tres Pods que violan una politica cada uno y un Deployment que viola las tres.
+$ kubectl apply -f kyverno/pruebas/no-conforme.yaml
+Error from server: error when creating "kyverno/pruebas/no-conforme.yaml": admission webhook "vpol.validate.kyverno.svc-fail" denied the request: Policy prohibir-tag-latest failed: No se permite la etiqueta latest ni imagenes sin tag. Contenedores: app (calculadora:latest)
+Error from server: error when creating "kyverno/pruebas/no-conforme.yaml": admission webhook "vpol.validate.kyverno.svc-fail" denied the request: Policy exigir-requests-limits failed: Todos los contenedores deben declarar requests y limits de cpu y memory. Contenedores: app
+Error from server: error when creating "kyverno/pruebas/no-conforme.yaml": admission webhook "vpol.validate.kyverno.svc-fail" denied the request: Policy prohibir-root failed: Los contenedores no pueden correr como root: se requiere runAsNonRoot: true y runAsUser distinto de 0. Contenedores: app
+Error from server: error when creating "kyverno/pruebas/no-conforme.yaml": admission webhook "vpol.validate.kyverno.svc-fail" denied the request: Policy prohibir-tag-latest failed: No se permite la etiqueta latest ni imagenes sin tag. Contenedores: nginx (nginx); Policy exigir-requests-limits failed: Todos los contenedores deben declarar requests y limits de cpu y memory. Contenedores: nginx; Policy prohibir-root failed: Los contenedores no pueden correr como root: se requiere runAsNonRoot: true y runAsUser distinto de 0. Contenedores: nginx
+
+$ kubectl get pods prueba-latest prueba-sin-recursos prueba-root
+Error from server (NotFound): pods "prueba-latest" not found
+Error from server (NotFound): pods "prueba-sin-recursos" not found
+Error from server (NotFound): pods "prueba-root" not found
+
+$ kubectl get deploy prueba-todo-mal
+Error from server (NotFound): deployments.apps "prueba-todo-mal" not found
+
+## 3. Control positivo: un Pod que cumple las tres politicas es aceptado
+$ kubectl apply -f kyverno/pruebas/conforme.yaml
+pod/prueba-conforme created
+
+## 4. Los manifiestos de la entrega anterior tambien eran rechazados
+#  No declaraban runAsNonRoot. Por eso se agrego el securityContext en
+#  k8s/deployment-*.yaml (ver reports/kubelinter.txt).
+$ git show entrega3:k8s/deployment-blue.yaml | kubectl apply --dry-run=server -f -
+Error from server: error when creating "STDIN": admission webhook "vpol.validate.kyverno.svc-fail" denied the request: Policy prohibir-root failed: Los contenedores no pueden correr como root: se requiere runAsNonRoot: true y runAsUser distinto de 0. Contenedores: calculadora
+
+## 5. Los manifiestos actuales del proyecto cumplen y estan corriendo
+$ kubectl get deploy calculadora-blue calculadora-green prometheus grafana
+NAME                READY   UP-TO-DATE   AVAILABLE   AGE
+calculadora-blue    2/2     2            2           5m30s
+calculadora-green   2/2     2            2           5m30s
+prometheus          1/1     1            1           5m29s
+grafana             1/1     1            1           5m29s
+

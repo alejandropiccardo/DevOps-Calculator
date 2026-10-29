@@ -8,7 +8,7 @@ metadata:
     app: calculadora
     version: blue
 data:
-  APP_VERSION: "1.1"
+  APP_VERSION: "1.2"
   APP_COLOR: "blue"
 ---
 apiVersion: v1
@@ -19,5 +19,5 @@ metadata:
     app: calculadora
     version: green
 data:
-  APP_VERSION: "2.1"
+  APP_VERSION: "2.2"
   APP_COLOR: "green"

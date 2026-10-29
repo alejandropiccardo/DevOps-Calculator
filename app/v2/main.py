@@ -6,7 +6,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 import math
 import os
 
-APP_VERSION = os.getenv("APP_VERSION", "2.1")
+APP_VERSION = os.getenv("APP_VERSION", "2.2")
 APP_COLOR = os.getenv("APP_COLOR", "green")
 
 OPERACIONES = ["suma", "resta", "multiplicacion", "division", "raiz"]
