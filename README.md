@@ -1,7 +1,105 @@
-# Entregable 1 — Calculadora API con despliegue blue/green
+# Laboratorio 4 — Calculadora API con enfoque DevOps y DevSecOps
 
 **Materia:** DevOps — UCU
 **Integrantes:** Alejandro Piccardo, Tomas Darracq, Diego Handalian
+
+---
+
+# Reporte técnico final
+
+## a. Descripción general
+
+API REST de una calculadora (FastAPI) desplegada en Kubernetes con estrategia blue/green, monitoreada con
+Prometheus y Grafana y protegida con controles automáticos de seguridad en código, imagen, cluster y
+ejecución. El detalle de la aplicación está en la sección 1 de este documento.
+
+**Paso a paso por sección de la consigna:**
+
+| Sección                     | Documento                                          |
+|-----------------------------|----------------------------------------------------|
+| 1. Docker                   | [`docs/01-docker.md`](docs/01-docker.md)           |
+| 2. Kubernetes               | [`docs/02-kubernetes.md`](docs/02-kubernetes.md)   |
+| 4. Prometheus y Grafana     | [`docs/04-monitoreo.md`](docs/04-monitoreo.md)     |
+| 5. Semgrep, Snyk, Kyverno, Falco | [`docs/05-seguridad.md`](docs/05-seguridad.md) |
+
+**Inicio rápido:**
+
+```bash
+./scripts/iniciar.sh          # minikube, imágenes, Kyverno, Falco, app, monitoreo y carga
+./scripts/abrir-monitoreo.sh  # Grafana y Prometheus en localhost
+./scripts/generar-carga.sh    # más tráfico para los dashboards
+./scripts/limpiar.sh          # borra los recursos (--todo borra también minikube)
+```
+
+Requisitos: Docker, kubectl, minikube y Helm (solo para instalar Falco).
+
+## b. Arquitectura final
+
+```mermaid
+flowchart LR
+    U([Cliente])
+
+    subgraph K8S["Cluster Kubernetes"]
+        subgraph OBS["Monitoreo"]
+            GR[Grafana] -->|consultas| P[Prometheus]
+        end
+
+        subgraph SEC["Seguridad"]
+            KY["Kyverno<br/>4 políticas"]
+            F["Falco<br/>DaemonSet"]
+        end
+
+        subgraph APP["Aplicación blue/green"]
+            S[Service calculadora] -->|activo| B["Pods blue v1.2<br/>+ ConfigMap"]
+            S -.->|al hacer el switch| G["Pods green v2.2<br/>+ ConfigMap"]
+        end
+    end
+
+    U -->|NodePort 30080| S
+    P -->|"/metrics, CPU y memoria"| APP
+    KY -->|valida al admitir| APP
+    F -->|observa syscalls| APP
+```
+
+## c. Pipeline implementado
+
+El pipeline de Jenkins está a cargo de otro integrante del grupo. Las herramientas que usa ya se pueden correr
+con `scripts/escanear-semgrep.sh` y `scripts/escanear-snyk.sh`.
+
+## d. Métricas y dashboard de Grafana
+
+El dashboard exportado es [`grafana/dashboard.json`](grafana/dashboard.json) y muestra RPS, latencia promedio,
+CPU y memoria por pod y operaciones por tipo (métrica de negocio). Valores medidos bajo carga: 2,09 RPS, 4,25 ms
+de latencia promedio y unos 37 MB de memoria por pod. Ver [`docs/04-monitoreo.md`](docs/04-monitoreo.md).
+
+## e. Resultados de seguridad
+
+| Herramienta | Resultado                                                                 | Evidencia                         |
+|-------------|---------------------------------------------------------------------------|-----------------------------------|
+| Semgrep     | 258 reglas (3 propias), 0 hallazgos; 6 corregidos                         | `reports/semgrep-report.txt`      |
+| Snyk        | 15 dependencias por versión, 0 vulnerabilidades                           | `reports/snyk-report.txt`         |
+| Trivy       | De 47 HIGH a 0 vulnerabilidades                                           | `reports/trivyreport.txt`         |
+| Dive        | 70,7 MB, 8 capas, eficiencia 99,59 %                                      | `reports/image-analysis.md`       |
+| Kyverno     | 4 políticas en `Deny`; 5 objetos rechazados, 1 aceptado                   | `reports/kyverno-validation.log`  |
+| Falco       | Alerta `Search Private Keys or Passwords`, sin abrir un shell             | `reports/falco-event.log`         |
+
+## f. Problemas encontrados y soluciones
+
+| Problema                                                                       | Solución                                                                 |
+|--------------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| 44 CVE HIGH sin parche en la base Debian                                       | Cambio a Alpine con build multi-stage                                    |
+| La evidencia de Falco era abrir un shell, prohibido por la consigna            | Pod que ejecuta `find` y dispara una regla por defecto                   |
+| `minikube image load` no reemplaza un tag existente y quedaba la imagen vieja  | Borrar el tag dentro de minikube antes de cargar (`iniciar.sh`)          |
+| Las consultas de CPU y memoria volvían vacías                                  | cAdvisor no publica el label `container` acá: se filtra por `pod`        |
+| Una URL inventada podía crear series nuevas en Prometheus                      | El label `path` usa la ruta declarada, con `no_encontrada` como respaldo |
+
+## g. Conclusiones y oportunidades de mejora
+
+Integrar los controles en distintas capas permitió detectar problemas que una sola herramienta no veía: Semgrep
+y KubeLinter marcaron los manifiestos, Trivy la imagen base y Kyverno impide que esas fallas vuelvan al cluster.
+
+Oportunidades de mejora: guardar la clave de Grafana en un gestor de secretos, dar almacenamiento persistente a
+Prometheus y agregar Alertmanager para que las alertas notifiquen a alguien.
 
 ---
 
@@ -68,6 +166,10 @@ Entrega1/
 │   └── dashboard.json          # dashboard exportado (RPS, latencia, CPU/memoria por pod, negocio)
 ├── scripts/
 │   ├── iniciar.sh              # levanta todo (minikube, imagenes, Kyverno, Falco, app, monitoreo)
+│   ├── abrir-monitoreo.sh      # expone Grafana y Prometheus en localhost
+│   ├── analizar-imagenes.sh    # Dive: tamano y capas
+│   ├── escanear-semgrep.sh     # actualiza reports/semgrep-report.txt
+│   ├── escanear-snyk.sh        # genera reports/snyk-report.txt (requiere SNYK_TOKEN)
 │   ├── instalar-operadores.sh  # instala Kyverno y Falco + aplica las politicas
 │   ├── generar-carga.sh        # trafico para poblar los dashboards (bash)
 │   ├── generar-carga.ps1       # idem para PowerShell
@@ -78,8 +180,11 @@ Entrega1/
 │   ├── politicas/              # las 4 ValidatingPolicy
 │   └── pruebas/                # manifiestos conforme / no conforme
 ├── falco/
-│   ├── values.yaml             # values del chart de Helm de Falco + regla propia
-│   └── prueba-falco.yaml       # Pod que dispara la regla (sin shell)
+│   ├── values.yaml             # values del chart de Helm de Falco
+│   └── prueba-falco.yaml       # Pod que dispara la alerta (sin shell)
+├── semgrep/
+│   └── reglas-python.yaml      # reglas de seguridad propias
+├── docs/                       # paso a paso de cada seccion de la consigna
 ├── reports/                    # evidencia de la entrega 3 (ver sección 7)
 └── README.md
 ```
@@ -422,7 +527,7 @@ caen justo en los extremos. Es el comportamiento documentado de Prometheus para 
 | Imagen     | Trivy 0.76.1                    | [`reports/trivyreport.txt`](reports/trivyreport.txt)               | 47 HIGH, 0 CRITICAL             | 0 (de cualquier severidad) |
 | Kubernetes | Kyverno 1.19.2                  | [`reports/kyverno-validation.log`](reports/kyverno-validation.log) | —                               | 4 políticas en `Deny`      |
 | Kubernetes | KubeLinter 0.8.3                | [`reports/kubelinter.txt`](reports/kubelinter.txt)                 | 8 errores                       | 0                          |
-| Runtime    | Falco 0.45.1                    | [`reports/falco-event.log`](reports/falco-event.log)               | —                               | wget en contenedor detectado |
+| Runtime    | Falco 0.45.1                    | [`reports/falco-event.log`](reports/falco-event.log)               | —                               | búsqueda de claves detectada |
 
 Trivy, Semgrep y KubeLinter se corren como contenedores de Docker, así que no hace falta instalarlos.
 
@@ -569,28 +674,14 @@ kubectl -n falco rollout status ds/falco
 `falco/values.yaml` usa el driver **`modern_ebpf`**: no necesita compilar un módulo de kernel y
 funciona con el kernel de WSL2 que usa minikube en Windows.
 
-**Acción sospechosa (Lab 4: no puede ser abrir un shell):** un Pod ejecuta `wget` hacia internet.
-Es lo que haría un atacante para descargar una carga útil, y la calculadora nunca lo hace. Las reglas por
-defecto de Falco no lo cubren, así que `falco/values.yaml` define una regla propia
-(`Herramienta de red ejecutada en contenedor`, prioridad WARNING) en `customRules`.
+**Acción sospechosa (Lab 4: no puede ser abrir un shell):** un Pod ejecuta `find /etc -name id_rsa`, como
+haría un atacante buscando claves privadas. Dispara la regla por defecto **Search Private Keys or Passwords**.
 
 ```bash
-kubectl apply -f falco/prueba-falco.yaml
+./scripts/disparar-falco.sh
 ```
 
-**Ver la alerta:**
-
-```bash
-kubectl -n falco logs ds/falco -c falco | grep "Herramienta de red"
-```
-
-`./scripts/disparar-falco.sh` hace las dos cosas y guarda la alerta en `reports/falco-event.log`.
-
-> La evidencia de la Entrega 3 (`Terminal shell in container`, por `kubectl exec -it`) no sirve para el
-> Lab 4. Hay que volver a correr `disparar-falco.sh` con el cluster arriba para regenerar el log.
-
-> En minikube con driver docker, Falco ve todo el kernel de WSL2, así que también registra eventos de
-> otros contenedores de Docker Desktop. El script filtra solo los del pod `prueba-falco`.
+La alerta queda en `reports/falco-event.log`. Detalle en [`docs/05-seguridad.md`](docs/05-seguridad.md).
 
 ### 7.5 Decisiones técnicas
 
@@ -607,9 +698,6 @@ kubectl -n falco logs ds/falco -c falco | grep "Herramienta de red"
 `kyverno/politicas/04-prohibir-privilegiados.yaml` rechaza `privileged: true` y
 `allowPrivilegeEscalation: true`. Un contenedor privilegiado casi no tiene aislamiento con el nodo. Se
 agregó `prueba-privilegiado` a `kyverno/pruebas/no-conforme.yaml` (ahora son 5 objetos rechazados).
-
-> `reports/kyverno-validation.log` todavía muestra las 3 políticas de la Entrega 3. Para regenerarlo con
-> la 4ª: `./scripts/validar-kyverno.sh`.
 
 ---
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dispara la regla propia de Falco (wget en un contenedor, sin shell) y guarda
+# Dispara la regla estandar "Search Private Keys or Passwords" (sin shell) y guarda
 # la alerta en reports/falco-event.log.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -9,8 +9,9 @@ kubectl apply -f falco/prueba-falco.yaml
 sleep 15
 {
   echo "# Evento de Falco - $(date '+%Y-%m-%d %H:%M')"
-  echo "# Accion: Pod prueba-falco ejecuta wget (falco/prueba-falco.yaml). No abre shell."
-  echo "# Regla: Herramienta de red ejecutada en contenedor (falco/values.yaml, customRules)."
-  echo '$ kubectl -n falco logs ds/falco -c falco | grep "Herramienta de red"'
-  kubectl -n falco logs ds/falco -c falco | grep "Herramienta de red" | grep prueba-falco
+  echo "# Accion: el Pod prueba-falco ejecuta find /etc -name id_rsa (falco/prueba-falco.yaml).
+# Simula a un atacante buscando claves privadas. No abre ningun shell."
+  echo "# Regla: Search Private Keys or Passwords (reglas por defecto de Falco, prioridad Warning)."
+  echo '$ kubectl -n falco logs ds/falco -c falco | grep "Search Private Keys"'
+  kubectl -n falco logs ds/falco -c falco | grep "Search Private Keys" | grep prueba-falco
 } | tee "$LOG"

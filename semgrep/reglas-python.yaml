@@ -1,0 +1,38 @@
+# Reglas de seguridad propias para el codigo Python de la calculadora.
+# Se suman a los rulesets p/python y p/security-audit (ver scripts/escanear-semgrep.sh).
+rules:
+  - id: calculadora-eval-exec
+    languages: [python]
+    severity: ERROR
+    message: >-
+      eval/exec ejecutan texto como codigo. En una calculadora es la tentacion
+      obvia para resolver expresiones, y permite ejecucion remota de codigo si
+      la entrada viene del usuario. Hay que operar con float validados.
+    metadata:
+      cwe: "CWE-95: Eval Injection"
+      category: security
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+
+  - id: calculadora-subprocess-shell
+    languages: [python]
+    severity: ERROR
+    message: >-
+      subprocess con shell=True interpreta la cadena con /bin/sh y habilita
+      inyeccion de comandos. La API no necesita invocar procesos externos.
+    metadata:
+      cwe: "CWE-78: OS Command Injection"
+      category: security
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+
+  - id: calculadora-fastapi-debug
+    languages: [python]
+    severity: WARNING
+    message: >-
+      FastAPI con debug=True devuelve trazas completas al cliente en cada
+      excepcion y filtra detalles internos.
+    metadata:
+      cwe: "CWE-489: Active Debug Code"
+      category: security
+    pattern: FastAPI(..., debug=True, ...)

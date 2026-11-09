@@ -59,9 +59,5 @@ FALCO
 helm install falco falco --repo https://falcosecurity.github.io/charts --version 9.2.1 -n falco --create-namespace -f falco/values.yaml
 kubectl -n falco rollout status ds/falco
 
-kubectl get pods -l app=calculadora
-kubectl exec -it <pod> -- sh
-(adentro: whoami, cat /etc/shadow, exit)
-
-en otra terminal
-kubectl -n falco logs ds/falco -c falco | Select-String "Terminal shell"
+(dispara la alerta sin abrir un shell y guarda el log)
+./scripts/disparar-falco.sh

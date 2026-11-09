@@ -1,0 +1,153 @@
+# Analisis de imagenes - 2026-11-08 20:50  |  wagoodman/dive:v0.13.1
+
+================================================================================
+calculadora:1.2
+================================================================================
+Tamano (bytes): 70733209
+Capas del filesystem: 8
+
+$ docker history calculadora:1.2
+SIZE      CREATED BY
+0B        CMD ["uvicorn" "main:app" "--host" "0.0.0.0" "--port" "8000"]
+0B        EXPOSE [8000/tcp]
+0B        USER 10001
+4.23kB    COPY main.py . # buildkit
+0B        WORKDIR /app
+0B        ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin PYTHONDONTW
+17.6MB    COPY /opt/venv /opt/venv # buildkit
+4.18MB    RUN /bin/sh -c pip uninstall -y pip setuptools 2>/dev/null;     adduser -D -H -u 10001 app # buildkit
+0B        CMD ["python3"]
+36B       RUN /bin/sh -c set -eux;  for src in idle3 pip3 pydoc3 python3 python3-config; do   dst="$(echo "$src" | tr -d
+39.6MB    RUN /bin/sh -c set -eux;   apk add --no-cache --virtual .build-deps   bluez-dev   bzip2-dev   dpkg-dev dpkg   
+0B        ENV PYTHON_SHA256=b5796915dc45ff745cfb4e990a7e7c93d6f546328a102ce31448d69ebc37575c
+0B        ENV PYTHON_VERSION=3.12.16
+0B        ENV GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305
+910kB     RUN /bin/sh -c set -eux;  apk add --no-cache   ca-certificates   tzdata  ; # buildkit
+0B        ENV LANG=C.UTF-8
+0B        ENV PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0B        CMD ["/bin/sh"]
+8.43MB    ADD alpine-minirootfs-3.24.4-x86_64.tar.gz / # buildkit
+
+$ dive --ci calculadora:1.2
+Unable to find image 'wagoodman/dive:v0.13.1' locally
+v0.13.1: Pulling from wagoodman/dive
+f18232174bc9: Pulling fs layer
+c27d2562e825: Pulling fs layer
+738ad4236e29: Pulling fs layer
+738ad4236e29: Verifying Checksum
+738ad4236e29: Download complete
+f18232174bc9: Verifying Checksum
+f18232174bc9: Download complete
+f18232174bc9: Pull complete
+c27d2562e825: Verifying Checksum
+c27d2562e825: Download complete
+c27d2562e825: Pull complete
+738ad4236e29: Pull complete
+Digest: sha256:f1886e6c32c094fc41a623c1989f5cb3e48aa766da5f0be233f911fc1d85ce10
+Status: Downloaded newer image for wagoodman/dive:v0.13.1
+  Using default CI config
+Image Source: docker://calculadora:1.2
+Extracting image from docker-engine... (this can take a while for large images)
+Analyzing image...
+  efficiency: 99.5877 %
+  wastedBytes: 513248 bytes (513 kB)
+  userWastedPercent: 0.8240 %
+Inefficient Files:
+Count  Wasted Space  File Path
+    2        358 kB  /etc/ssl/certs/ca-certificates.crt
+    3        131 kB  /lib/apk/db/installed
+    2         14 kB  /var/log/apk.log
+    3        6.1 kB  /lib/apk/db/scripts.tar.gz
+    2        1.4 kB  /etc/passwd
+    2        1.0 kB  /etc/group
+    3         557 B  /lib/apk/db/triggers
+    2         545 B  /etc/shadow
+    3         300 B  /etc/apk/world
+    2         230 B  /usr/local/bin/pip3.12
+    2         230 B  /usr/local/bin/pip3
+    2           0 B  /usr/bin/find
+    2           0 B  /usr/bin/xargs
+    2           0 B  /usr/bin/lzma
+    2           0 B  /usr/bin/unlzma
+    2           0 B  /usr/bin/unxz
+    2           0 B  /usr/bin/awk
+    2           0 B  /bin/tar
+    2           0 B  /usr/bin/xzcat
+    2           0 B  /tmp
+    2           0 B  /usr/local/bin/pip
+    2           0 B  /usr/bin/lzcat
+    2           0 B  /usr/bin/strings
+Results:
+  PASS: highestUserWastedPercent
+  SKIP: highestWastedBytes: rule disabled
+  PASS: lowestEfficiency
+Result:PASS [Total:3] [Passed:2] [Failed:0] [Warn:0] [Skipped:1]
+
+
+================================================================================
+calculadora:2.2
+================================================================================
+Tamano (bytes): 70733461
+Capas del filesystem: 8
+
+$ docker history calculadora:2.2
+SIZE      CREATED BY
+0B        CMD ["uvicorn" "main:app" "--host" "0.0.0.0" "--port" "8000"]
+0B        EXPOSE [8000/tcp]
+0B        USER 10001
+4.48kB    COPY main.py . # buildkit
+0B        WORKDIR /app
+0B        ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin PYTHONDONTW
+17.6MB    COPY /opt/venv /opt/venv # buildkit
+4.18MB    RUN /bin/sh -c pip uninstall -y pip setuptools 2>/dev/null;     adduser -D -H -u 10001 app # buildkit
+0B        CMD ["python3"]
+36B       RUN /bin/sh -c set -eux;  for src in idle3 pip3 pydoc3 python3 python3-config; do   dst="$(echo "$src" | tr -d
+39.6MB    RUN /bin/sh -c set -eux;   apk add --no-cache --virtual .build-deps   bluez-dev   bzip2-dev   dpkg-dev dpkg   
+0B        ENV PYTHON_SHA256=b5796915dc45ff745cfb4e990a7e7c93d6f546328a102ce31448d69ebc37575c
+0B        ENV PYTHON_VERSION=3.12.16
+0B        ENV GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305
+910kB     RUN /bin/sh -c set -eux;  apk add --no-cache   ca-certificates   tzdata  ; # buildkit
+0B        ENV LANG=C.UTF-8
+0B        ENV PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0B        CMD ["/bin/sh"]
+8.43MB    ADD alpine-minirootfs-3.24.4-x86_64.tar.gz / # buildkit
+
+$ dive --ci calculadora:2.2
+  Using default CI config
+Image Source: docker://calculadora:2.2
+Extracting image from docker-engine... (this can take a while for large images)
+Analyzing image...
+  efficiency: 99.5877 %
+  wastedBytes: 513248 bytes (513 kB)
+  userWastedPercent: 0.8240 %
+Inefficient Files:
+Count  Wasted Space  File Path
+    2        358 kB  /etc/ssl/certs/ca-certificates.crt
+    3        131 kB  /lib/apk/db/installed
+    2         14 kB  /var/log/apk.log
+    3        6.1 kB  /lib/apk/db/scripts.tar.gz
+    2        1.4 kB  /etc/passwd
+    2        1.0 kB  /etc/group
+    3         557 B  /lib/apk/db/triggers
+    2         545 B  /etc/shadow
+    3         300 B  /etc/apk/world
+    2         230 B  /usr/local/bin/pip3.12
+    2         230 B  /usr/local/bin/pip3
+    2           0 B  /usr/bin/find
+    2           0 B  /usr/bin/xargs
+    2           0 B  /usr/bin/lzma
+    2           0 B  /usr/bin/unlzma
+    2           0 B  /usr/bin/unxz
+    2           0 B  /usr/bin/awk
+    2           0 B  /bin/tar
+    2           0 B  /usr/bin/xzcat
+    2           0 B  /tmp
+    2           0 B  /usr/local/bin/pip
+    2           0 B  /usr/bin/lzcat
+    2           0 B  /usr/bin/strings
+Results:
+  PASS: highestUserWastedPercent
+  SKIP: highestWastedBytes: rule disabled
+  PASS: lowestEfficiency
+Result:PASS [Total:3] [Passed:2] [Failed:0] [Warn:0] [Skipped:1]
+

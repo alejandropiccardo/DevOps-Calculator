@@ -113,3 +113,42 @@
 # DESPUES
 ################################################################################
 Sin hallazgos (0 findings).
+# LAB 4 - ULTIMA EJECUCION
+# Fecha: 2026-11-08 22:00
+# Reglas propias: semgrep/reglas-python.yaml + rulesets p/python, p/dockerfile,
+#                 p/kubernetes, p/secrets, p/security-audit
+# Codigo de salida de semgrep: 0
+
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 13 files tracked by git with 413 Code rules:
+                                                                                                                        
+  Language      Rules   Files          Origin      Rules                                                                
+ ─────────────────────────────        ───────────────────                                                               
+  <multilang>      38      13          Community     410                                                                
+  yaml             13       7          Custom          3                                                                
+  python          201       2                                                                                           
+  dockerfile        7       2                                                                                           
+                                                                                                                        
+                
+                
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 0 (0 blocking)
+ • Rules run: 258
+ • Targets scanned: 13
+ • Parsed lines: ~95.9%
+ • Scan was limited to files tracked by git
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 258 rules on 13 files: 0 findings.
+(need more rules? `semgrep login` for additional free Semgrep Registry rules)
+
+
+A new version of Semgrep is available. See https://semgrep.dev/docs/upgrading
+If Semgrep missed a finding, please send us feedback to let us know!
+See https://semgrep.dev/docs/reporting-false-negatives/

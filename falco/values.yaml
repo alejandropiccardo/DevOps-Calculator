@@ -27,22 +27,3 @@ resources:
   limits:
     cpu: 1000m
     memory: 1024Mi
-
-# Regla propia (Lab 4): la consigna pide una alerta que NO sea abrir un shell.
-# Se detecta la ejecucion de una herramienta de red (wget/curl/nc) dentro de un
-# contenedor: tipico de un atacante que descarga una carga util o abre una
-# conexion de salida. La calculadora nunca las usa.
-# Se dispara con falco/prueba-falco.yaml (un Pod que ejecuta wget, sin shell).
-customRules:
-  rules-calculadora.yaml: |-
-    - rule: Herramienta de red ejecutada en contenedor
-      desc: Un contenedor ejecuto wget, curl o nc, algo que la calculadora nunca hace
-      condition: >
-        spawned_process and container and
-        proc.name in (wget, curl, nc, ncat)
-      output: >
-        Herramienta de red ejecutada en contenedor
-        (proc=%proc.name cmd=%proc.cmdline user=%user.name uid=%user.uid
-        pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository:%container.image.tag)
-      priority: WARNING
-      tags: [network, mitre_command_and_control, lab4]

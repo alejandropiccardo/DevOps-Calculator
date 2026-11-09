@@ -27,8 +27,8 @@ ERRORES_TOTAL = Counter(
 )
 
 # Latencia y volumen de peticiones HTTP (para RPS y latencia promedio en Grafana).
-# Se etiqueta por "path" (ruta fija de la app, cardinalidad acotada) y no por URL
-# completa para no generar una serie por cada valor de a/b.
+# El label "path" es la ruta declarada en la app, no la URL pedida: si no, cada
+# URL inventada (404) crearia una serie nueva en Prometheus.
 PETICIONES_SEGUNDOS = Histogram(
     "calculadora_peticiones_segundos",
     "Duracion de las peticiones HTTP",
@@ -74,11 +74,13 @@ async def parametros_invalidos(request: Request, exc: RequestValidationError):
 async def medir_latencia(request: Request, call_next):
     inicio = time.perf_counter()
     respuesta = await call_next(request)
-    # /metrics no se mide: Prometheus lo consulta cada 15 s y ensuciaria el RPS.
-    if request.url.path != "/metrics":
+    # /metrics y /health no se miden: los consultan Prometheus y las probes del
+    # kubelet cada pocos segundos y ensuciarian el RPS.
+    if request.url.path not in ("/metrics", "/health"):
+        ruta = request.scope.get("route")
         PETICIONES_SEGUNDOS.labels(
             metodo=request.method,
-            path=request.url.path,
+            path=ruta.path if ruta else "no_encontrada",
             codigo=str(respuesta.status_code),
             version=APP_VERSION,
         ).observe(time.perf_counter() - inicio)

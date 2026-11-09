@@ -1,0 +1,67 @@
+# Escaneo de dependencias con Snyk - 2026-11-08 22:01
+
+================================================================================
+$ snyk test --file=requirements.txt --package-manager=pip   (app/v1)
+================================================================================
+Testing  (requirements.txt) ...
+
+Tested 15 dependencies for known issues, found 0 issues, 0 vulnerable paths.
+
+Open Security issues: 0
+
+╭───────────────────────────────────────────────────────╮
+│ Test Summary                                          │
+│                                                       │
+│   Organization:                                       │
+│   Test type:         Software Composition Analysis    │
+│   Project name:      app                              │
+│   Project path:      /app                             │
+│   Target file:       requirements.txt                 │
+│                                                       │
+│   Total security issues: 0                            │
+╰───────────────────────────────────────────────────────╯
+
+💡 Tip
+
+   Some capabilities, including the ability to apply ignores, are unavailable. Retest the project with the --remote-repo-url parameter or from within a repository to enable full functionality.
+                                                                                                                                                                                                
+
+💡 Tip
+
+   To view ignored issues, use the --include-ignores option.
+                                                            
+
+# Codigo de salida: 0  (0 = sin vulnerabilidades, 1 = hay, 2/3 = error)
+
+================================================================================
+$ snyk test --file=requirements.txt --package-manager=pip   (app/v2)
+================================================================================
+Testing  (requirements.txt) ...
+
+Tested 15 dependencies for known issues, found 0 issues, 0 vulnerable paths.
+
+Open Security issues: 0
+
+╭───────────────────────────────────────────────────────╮
+│ Test Summary                                          │
+│                                                       │
+│   Organization:                                       │
+│   Test type:         Software Composition Analysis    │
+│   Project name:      app                              │
+│   Project path:      /app                             │
+│   Target file:       requirements.txt                 │
+│                                                       │
+│   Total security issues: 0                            │
+╰───────────────────────────────────────────────────────╯
+
+💡 Tip
+
+   Some capabilities, including the ability to apply ignores, are unavailable. Retest the project with the --remote-repo-url parameter or from within a repository to enable full functionality.
+                                                                                                                                                                                                
+
+💡 Tip
+
+   To view ignored issues, use the --include-ignores option.
+                                                            
+
+# Codigo de salida: 0  (0 = sin vulnerabilidades, 1 = hay, 2/3 = error)

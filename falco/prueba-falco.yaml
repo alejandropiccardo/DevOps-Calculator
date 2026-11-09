@@ -1,9 +1,10 @@
-# Pod que dispara la regla "Herramienta de red ejecutada en contenedor" de
-# falco/values.yaml. No abre ningun shell: el comando del contenedor es wget.
+# Pod que dispara la regla estandar de Falco "Search Private Keys or Passwords".
+# Simula a un atacante buscando claves privadas dentro del contenedor. No abre
+# ningun shell: el comando del contenedor es directamente find.
 # Cumple las 4 politicas de Kyverno, asi que se admite.
 #
 #   kubectl apply -f falco/prueba-falco.yaml
-#   kubectl -n falco logs ds/falco -c falco | grep "Herramienta de red"
+#   kubectl -n falco logs ds/falco -c falco | grep "Search Private Keys"
 apiVersion: v1
 kind: Pod
 metadata:
@@ -17,7 +18,7 @@ spec:
     - name: app
       image: calculadora:2.2
       imagePullPolicy: IfNotPresent
-      command: ["wget", "-q", "-T", "3", "-O", "/dev/null", "http://example.com"]
+      command: ["find", "/etc", "-name", "id_rsa"]
       securityContext:
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
