@@ -1,0 +1,51 @@
+# Politica 3: impedir contenedores que corran como root.
+#
+# Cada contenedor tiene que terminar con runAsNonRoot: true, ya sea porque lo
+# declara el o porque lo hereda del securityContext del pod (el del
+# contenedor tiene prioridad). Tambien se rechaza runAsUser: 0 explicito.
+# Con runAsNonRoot el kubelet ademas verifica, al arrancar, que el usuario de
+# la imagen no sea root.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: prohibir-root
+  annotations:
+    policies.kyverno.io/title: Prohibir contenedores como root
+    policies.kyverno.io/severity: high
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, kyverno, falco]
+  autogen:
+    podControllers:
+      controllers: [deployments, replicasets, statefulsets, daemonsets, jobs, cronjobs]
+  variables:
+    - name: contenedores
+      expression: >-
+        object.spec.containers + object.spec.?initContainers.orValue([])
+    - name: podNonRoot
+      expression: object.spec.?securityContext.?runAsNonRoot.orValue(false)
+    # Si no se declara runAsUser se toma 1 (no root): el que manda en ese caso
+    # es runAsNonRoot, que el kubelet valida contra la imagen.
+    - name: podUser
+      expression: object.spec.?securityContext.?runAsUser.orValue(1)
+    - name: invalidos
+      expression: >-
+        variables.contenedores.filter(c,
+          !(c.?securityContext.?runAsNonRoot.orValue(variables.podNonRoot) == true &&
+            c.?securityContext.?runAsUser.orValue(variables.podUser) != 0)
+        ).map(c, c.name)
+  validations:
+    - expression: size(variables.invalidos) == 0
+      messageExpression: >-
+        'Los contenedores no pueden correr como root: se requiere runAsNonRoot: true y runAsUser distinto de 0. Contenedores: ' +
+        variables.invalidos.join(', ')

@@ -1,0 +1,43 @@
+# Politica 2: exigir requests y limits de CPU y memoria en todos los pods.
+#
+# Sin requests el scheduler no sabe cuanto reservar; sin limits un solo pod
+# (por un bug o un ataque) puede consumir todo el nodo y tirar al resto.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: exigir-requests-limits
+  annotations:
+    policies.kyverno.io/title: Exigir requests y limits
+    policies.kyverno.io/severity: medium
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, kyverno, falco]
+  autogen:
+    podControllers:
+      controllers: [deployments, replicasets, statefulsets, daemonsets, jobs, cronjobs]
+  variables:
+    - name: contenedores
+      expression: >-
+        object.spec.containers + object.spec.?initContainers.orValue([])
+    - name: invalidos
+      expression: >-
+        variables.contenedores.filter(c,
+          !(['cpu', 'memory'].all(r,
+              r in c.?resources.?requests.orValue({}) &&
+              r in c.?resources.?limits.orValue({})))
+        ).map(c, c.name)
+  validations:
+    - expression: size(variables.invalidos) == 0
+      messageExpression: >-
+        'Todos los contenedores deben declarar requests y limits de cpu y memory. Contenedores: ' +
+        variables.invalidos.join(', ')

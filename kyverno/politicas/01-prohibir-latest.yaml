@@ -1,0 +1,52 @@
+# Politica 1: prohibir imagenes con la etiqueta latest.
+#
+# "latest" no identifica una version: dos despliegues con el mismo manifiesto
+# pueden terminar corriendo imagenes distintas, y un rollback no garantiza
+# volver a lo que habia. Se exige un tag explicito (o un digest @sha256).
+# Una imagen sin tag ("nginx") tambien se rechaza, porque Kubernetes la
+# interpreta como "nginx:latest".
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: prohibir-tag-latest
+  annotations:
+    policies.kyverno.io/title: Prohibir la etiqueta latest
+    policies.kyverno.io/severity: medium
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    # Componentes de sistema que no son parte de la aplicacion.
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, kyverno, falco]
+  # La misma regla se genera para Deployments, StatefulSets, etc., asi el
+  # rechazo ocurre al aplicar el Deployment y no recien al crear sus pods.
+  autogen:
+    podControllers:
+      controllers: [deployments, replicasets, statefulsets, daemonsets, jobs, cronjobs]
+  variables:
+    - name: contenedores
+      expression: >-
+        object.spec.containers + object.spec.?initContainers.orValue([])
+    # Una imagen es valida si tiene digest, o si su ultimo segmento (despues
+    # de la ultima "/", para no confundir el puerto del registry con un tag)
+    # tiene un tag distinto de latest.
+    - name: invalidos
+      expression: >-
+        variables.contenedores.filter(c,
+          !(c.image.contains('@') ||
+            (c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') &&
+             !c.image.endsWith(':latest')))
+        ).map(c, c.name + ' (' + c.image + ')')
+  validations:
+    - expression: size(variables.invalidos) == 0
+      messageExpression: >-
+        'No se permite la etiqueta latest ni imagenes sin tag. Contenedores: ' +
+        variables.invalidos.join(', ')

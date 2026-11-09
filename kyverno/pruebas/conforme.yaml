@@ -1,0 +1,19 @@
+# Control positivo: un Pod que cumple las cuatro politicas y tiene que ser
+# aceptado. Demuestra que las politicas no rechazan todo indiscriminadamente.
+#
+#   kubectl apply -f kyverno/pruebas/conforme.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: prueba-conforme
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+  containers:
+    - name: app
+      image: calculadora:2.2
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 250m, memory: 128Mi }

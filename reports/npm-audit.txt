@@ -1,0 +1,97 @@
+# Auditoria de dependencias - Entrega 3
+# Fecha: 2026-10-27 19:48
+#
+# La calculadora esta hecha en Python (FastAPI), no en Node: no hay package.json
+# ni package-lock.json, asi que 'npm audit' no tiene nada que auditar. Se deja
+# su salida como evidencia y se usa pip-audit, que es la herramienta equivalente
+# para Python (consulta la base de vulnerabilidades de PyPI / OSV).
+
+================================================================================
+$ npm audit
+================================================================================
+npm error code ENOLOCK
+npm error audit This command requires an existing lockfile.
+npm error audit Try creating one first with: npm i --package-lock-only
+npm error audit Original error: loadVirtual requires existing shrinkwrap file
+
+================================================================================
+ANTES  -  $ pip-audit -r app/v1/requirements.txt
+================================================================================
+# fastapi==0.115.6
+# uvicorn==0.34.0
+# prometheus-client==0.21.1
+Found 14 known vulnerabilities in 1 package
+Name      Version ID              Fix Versions
+--------- ------- --------------- ------------
+starlette 0.41.3  PYSEC-2026-1941 0.47.2
+starlette 0.41.3  PYSEC-2026-1942 0.49.1
+starlette 0.41.3  PYSEC-2026-161  1.0.1
+starlette 0.41.3  PYSEC-2026-161  1.0.1
+starlette 0.41.3  PYSEC-2026-2281 1.1.0
+starlette 0.41.3  PYSEC-2026-2280 1.1.0
+starlette 0.41.3  PYSEC-2026-249  1.3.1
+starlette 0.41.3  PYSEC-2026-248  1.3.0
+starlette 0.41.3  PYSEC-2026-249  1.3.1
+starlette 0.41.3  PYSEC-2026-248  1.3.0
+starlette 0.41.3  PYSEC-2026-1942 0.49.1
+starlette 0.41.3  PYSEC-2026-1941 0.47.2
+starlette 0.41.3  PYSEC-2026-2281 1.1.0
+starlette 0.41.3  PYSEC-2026-2280 1.1.0
+
+================================================================================
+ANTES  -  $ pip-audit -r app/v2/requirements.txt
+================================================================================
+# fastapi==0.115.6
+# uvicorn==0.34.0
+# prometheus-client==0.21.1
+Found 14 known vulnerabilities in 1 package
+Name      Version ID              Fix Versions
+--------- ------- --------------- ------------
+starlette 0.41.3  PYSEC-2026-1941 0.47.2
+starlette 0.41.3  PYSEC-2026-1942 0.49.1
+starlette 0.41.3  PYSEC-2026-161  1.0.1
+starlette 0.41.3  PYSEC-2026-161  1.0.1
+starlette 0.41.3  PYSEC-2026-2281 1.1.0
+starlette 0.41.3  PYSEC-2026-2280 1.1.0
+starlette 0.41.3  PYSEC-2026-249  1.3.1
+starlette 0.41.3  PYSEC-2026-248  1.3.0
+starlette 0.41.3  PYSEC-2026-249  1.3.1
+starlette 0.41.3  PYSEC-2026-248  1.3.0
+starlette 0.41.3  PYSEC-2026-1942 0.49.1
+starlette 0.41.3  PYSEC-2026-1941 0.47.2
+starlette 0.41.3  PYSEC-2026-2281 1.1.0
+starlette 0.41.3  PYSEC-2026-2280 1.1.0
+
+================================================================================
+DESPUES  -  $ pip-audit -r app/v1/requirements.txt
+================================================================================
+# fastapi==0.162.0
+# starlette==1.10.0
+# uvicorn==0.54.0
+# prometheus-client==0.26.0
+No known vulnerabilities found
+
+================================================================================
+DESPUES  -  $ pip-audit -r app/v2/requirements.txt
+================================================================================
+# fastapi==0.162.0
+# starlette==1.10.0
+# uvicorn==0.54.0
+# prometheus-client==0.26.0
+No known vulnerabilities found
+
+================================================================================
+RESOLUCION
+================================================================================
+Las 14 entradas (7 vulnerabilidades distintas, cada una con alias PYSEC/GHSA)
+estaban todas en starlette 0.41.3, que no aparece en requirements.txt: la
+instalaba fastapi 0.115.6 como dependencia.
+
+  - fastapi 0.115.6 -> 0.162.0 (ultima version; acepta starlette 1.x, que trae los parches)
+  - starlette fijado en 1.10.0 de forma explicita, para que el resolver de pip
+    no pueda volver a elegir una version vulnerable
+  - uvicorn 0.34.0 -> 0.54.0, prometheus-client 0.21.1 -> 0.26.0 (al dia)
+
+Se verifico que la API se comporta igual con las versiones nuevas: mismos
+codigos de respuesta (200/400/404/422) en todos los endpoints y mismas
+metricas en /metrics.

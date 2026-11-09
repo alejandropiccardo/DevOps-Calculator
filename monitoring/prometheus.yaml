@@ -1,0 +1,202 @@
+# ---------------------------------------------------------------------------
+# RBAC: Prometheus consulta la API de Kubernetes para descubrir solo los pods
+# que tienen que ser scrapeados. Sin estos permisos no encuentra ningun target.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  # Para leer CPU/memoria por pod (cAdvisor) a traves del kubelet.
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy", "nodes/metrics"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: default
+---
+# ---------------------------------------------------------------------------
+# Configuracion de Prometheus + reglas de alerta
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s      # cada cuanto consulta /metrics
+      evaluation_interval: 15s  # cada cuanto evalua las reglas de alerta
+
+    rule_files:
+      - /etc/prometheus/alertas.yml
+
+    scrape_configs:
+      - job_name: calculadora
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # Solo los pods anotados con prometheus.io/scrape: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          # El path de /metrics sale de la anotacion prometheus.io/path
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # El puerto sale de la anotacion prometheus.io/port
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # Etiquetas utiles para los dashboards
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          # La label "version" del pod es blue/green: se renombra a "entorno"
+          # para no chocar con la label "version" (1.1/2.1) de la metrica.
+          - source_labels: [__meta_kubernetes_pod_label_version]
+            target_label: entorno
+
+      # CPU y memoria por pod: cAdvisor (dentro del kubelet) expone
+      # container_cpu_usage_seconds_total y container_memory_working_set_bytes.
+      # Se consulta por el proxy de la API de Kubernetes con el token del pod.
+      - job_name: cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+
+  alertas.yml: |
+    groups:
+      - name: calculadora
+        rules:
+          # Consigna: alertar si se pasan X operaciones en Y minutos.
+          - alert: DemasiadasOperaciones
+            expr: sum(increase(calculadora_operaciones_total[5m])) > 20
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pico de operaciones en la calculadora"
+              description: '{{ $value | printf "%.0f" }} operaciones en los ultimos 5 minutos (umbral: 20)'
+
+          # Alerta de operaciones invalidas: division por cero, raiz de negativo
+          # o parametros no numericos. El umbral es mas bajo porque un volumen
+          # alto de errores indica un problema, no uso normal.
+          - alert: DemasiadasOperacionesInvalidas
+            expr: sum(increase(calculadora_errores_total[5m])) > 5
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Muchas operaciones invalidas en la calculadora"
+              description: '{{ $value | printf "%.0f" }} operaciones rechazadas en los ultimos 5 minutos (umbral: 5)'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsUser: 65534
+        runAsNonRoot: true
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.1.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: datos
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # Solo escribe en /prometheus (emptyDir), el resto puede ser read-only.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        # emptyDir: los datos se pierden si el pod se reinicia. Alcanza para la
+        # demo; en produccion iria un PersistentVolume.
+        - name: datos
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  type: NodePort
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+      nodePort: 30090

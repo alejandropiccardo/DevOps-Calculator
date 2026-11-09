@@ -1,0 +1,45 @@
+# Politica 4 (buena practica): prohibir contenedores privilegiados.
+#
+# Un contenedor con privileged: true tiene acceso casi total al nodo (todos los
+# dispositivos, sin filtro de capabilities ni seccomp): es el camino mas corto
+# para escapar del contenedor. Ninguna carga de este proyecto lo necesita.
+# Tambien se rechaza allowPrivilegeEscalation: true explicito.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: prohibir-privilegiados
+  annotations:
+    policies.kyverno.io/title: Prohibir contenedores privilegiados
+    policies.kyverno.io/severity: high
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          # Falco necesita privilegios para leer syscalls del kernel.
+          values: [kube-system, kube-public, kube-node-lease, kyverno, falco]
+  autogen:
+    podControllers:
+      controllers: [deployments, replicasets, statefulsets, daemonsets, jobs, cronjobs]
+  variables:
+    - name: contenedores
+      expression: >-
+        object.spec.containers + object.spec.?initContainers.orValue([])
+    - name: invalidos
+      expression: >-
+        variables.contenedores.filter(c,
+          c.?securityContext.?privileged.orValue(false) == true ||
+          c.?securityContext.?allowPrivilegeEscalation.orValue(false) == true
+        ).map(c, c.name)
+  validations:
+    - expression: size(variables.invalidos) == 0
+      messageExpression: >-
+        'No se permiten contenedores privilegiados ni con allowPrivilegeEscalation: true. Contenedores: ' +
+        variables.invalidos.join(', ')

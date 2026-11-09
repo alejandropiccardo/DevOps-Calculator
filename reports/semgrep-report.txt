@@ -1,0 +1,115 @@
+# Analisis estatico con Semgrep 1.181.1 - Entrega 3
+# Fecha: 2026-10-27 20:05
+# Comando:
+#   docker run --rm -v "${PWD}:/src" -w /src semgrep/semgrep:1.181.1 semgrep scan \
+#     --config p/python --config p/dockerfile --config p/kubernetes \
+#     --config p/secrets --config p/security-audit --metrics=off app k8s monitoring
+#
+# RESUMEN: 255 reglas. 6 hallazgos antes -> 0 despues.
+#   El codigo Python y los Dockerfiles no tuvieron hallazgos; los 6 eran de los
+#   manifiestos de Kubernetes:
+#   - run-as-non-root (calculadora blue y green): CORREGIDO, securityContext con
+#     runAsNonRoot: true y runAsUser 10001.
+#   - writable-filesystem-container (calculadora x2, prometheus, grafana):
+#     CORREGIDO, readOnlyRootFilesystem: true (+ emptyDir donde Grafana escribe).
+#
+# QUE SE MANTIENE Y POR QUE
+#   - kyverno/pruebas/*.yaml: si se incluyen en el escaneo, Semgrep marca 8
+#     hallazgos. Son los manifiestos que se usan para probar Kyverno y estan mal
+#     a proposito (root, latest, sin recursos); no se despliegan.
+#   - uvicorn --host 0.0.0.0 en el Dockerfile: dentro de un contenedor es
+#     obligatorio escuchar en todas las interfaces para que el Service llegue
+#     al pod. La exposicion real la controla el Service.
+#   - monitoring/grafana.yaml tiene la clave de admin de demo en un Secret
+#     versionado. Semgrep no lo detecta (no es un formato de token conocido),
+#     pero se deja constancia: es una clave de demo para minikube y ya estaba
+#     documentada en la entrega anterior. En un entorno real iria en un gestor
+#     de secretos (Sealed Secrets / External Secrets) y no en git.
+
+################################################################################
+# ANTES
+################################################################################
+                   
+                   
+┌─────────────────┐
+│ 6 Code Findings │
+└─────────────────┘
+                            
+    k8s/deployment-blue.yaml
+     ❱ yaml.kubernetes.security.run-as-non-root.run-as-non-root
+          ❰❰ Blocking ❱❱
+          When running containers in Kubernetes, it's important to ensure that they  are properly secured to  
+          prevent privilege escalation attacks.  One potential vulnerability is when a container is allowed to
+          run  applications as the root user, which could allow an attacker to gain  access to sensitive      
+          resources. To mitigate this risk, it's recommended to  add a `securityContext` to the container,    
+          with the parameter `runAsNonRoot`  set to `true`. This will ensure that the container runs as a non-
+          root user,  limiting the damage that could be caused by any potential attacks. By  adding a         
+          `securityContext` to the container in your Kubernetes pod, you can  help to ensure that your        
+          containerized applications are more secure and  less vulnerable to privilege escalation attacks.    
+          Details: https://sg.run/dgP5                                                                        
+                                                                                                              
+           ▶▶┆ Autofix ▶ spec: securityContext: runAsNonRoot: true #
+           25┆ spec:
+   
+    ❯❱ yaml.kubernetes.security.writable-filesystem-container.writable-filesystem-container
+          ❰❰ Blocking ❱❱
+          Container calculadora is running with a writable root filesystem. This may allow malicious        
+          applications to download and run additional payloads, or modify container files. If an application
+          inside a container has to save something temporarily consider using a tmpfs. Add                  
+          'readOnlyRootFilesystem: true' to this container to prevent this.                                 
+          Details: https://sg.run/ZePL                                                                      
+                                                                                                            
+           27┆ - name: calculadora
+                             
+    k8s/deployment-green.yaml
+     ❱ yaml.kubernetes.security.run-as-non-root.run-as-non-root
+          ❰❰ Blocking ❱❱
+          When running containers in Kubernetes, it's important to ensure that they  are properly secured to  
+          prevent privilege escalation attacks.  One potential vulnerability is when a container is allowed to
+          run  applications as the root user, which could allow an attacker to gain  access to sensitive      
+          resources. To mitigate this risk, it's recommended to  add a `securityContext` to the container,    
+          with the parameter `runAsNonRoot`  set to `true`. This will ensure that the container runs as a non-
+          root user,  limiting the damage that could be caused by any potential attacks. By  adding a         
+          `securityContext` to the container in your Kubernetes pod, you can  help to ensure that your        
+          containerized applications are more secure and  less vulnerable to privilege escalation attacks.    
+          Details: https://sg.run/dgP5                                                                        
+                                                                                                              
+           ▶▶┆ Autofix ▶ spec: securityContext: runAsNonRoot: true #
+           25┆ spec:
+   
+    ❯❱ yaml.kubernetes.security.writable-filesystem-container.writable-filesystem-container
+          ❰❰ Blocking ❱❱
+          Container calculadora is running with a writable root filesystem. This may allow malicious        
+          applications to download and run additional payloads, or modify container files. If an application
+          inside a container has to save something temporarily consider using a tmpfs. Add                  
+          'readOnlyRootFilesystem: true' to this container to prevent this.                                 
+          Details: https://sg.run/ZePL                                                                      
+                                                                                                            
+           27┆ - name: calculadora
+                           
+    monitoring/grafana.yaml
+    ❯❱ yaml.kubernetes.security.writable-filesystem-container.writable-filesystem-container
+          ❰❰ Blocking ❱❱
+          Container grafana is running with a writable root filesystem. This may allow malicious applications
+          to download and run additional payloads, or modify container files. If an application inside a     
+          container has to save something temporarily consider using a tmpfs. Add 'readOnlyRootFilesystem:   
+          true' to this container to prevent this.                                                           
+          Details: https://sg.run/ZePL                                                                       
+                                                                                                             
+           66┆ - name: grafana
+                              
+    monitoring/prometheus.yaml
+    ❯❱ yaml.kubernetes.security.writable-filesystem-container.writable-filesystem-container
+          ❰❰ Blocking ❱❱
+          Container prometheus is running with a writable root filesystem. This may allow malicious         
+          applications to download and run additional payloads, or modify container files. If an application
+          inside a container has to save something temporarily consider using a tmpfs. Add                  
+          'readOnlyRootFilesystem: true' to this container to prevent this.                                 
+          Details: https://sg.run/ZePL                                                                      
+                                                                                                            
+          124┆ - name: prometheus
+
+################################################################################
+# DESPUES
+################################################################################
+Sin hallazgos (0 findings).

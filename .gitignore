@@ -47,6 +47,8 @@ desktop.ini
 
 # ---- Logs y temporales ----
 *.log
+# ...salvo la evidencia de la entrega 3 (reports/falco-event.log)
+!reports/*.log
 tmp/
 temp/
 

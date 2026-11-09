@@ -1,0 +1,53 @@
+# Analisis de manifiestos con KubeLinter 0.8.3 - Entrega 3
+# Fecha: 2026-10-27 20:04
+# Comando: docker run --rm -v "${PWD}:/src" -w /src stackrox/kube-linter:v0.8.3 lint k8s monitoring
+#
+# RESUMEN: 8 errores antes -> 0 despues.
+#
+# Correcciones aplicadas:
+#   run-as-non-root (calculadora blue/green)
+#       securityContext del pod con runAsNonRoot: true y runAsUser/runAsGroup 10001
+#       (UID numerico que crea el Dockerfile). Es ademas lo que exige la politica
+#       kyverno/politicas/03-prohibir-root.yaml.
+#   no-read-only-root-fs (calculadora, prometheus, grafana)
+#       readOnlyRootFilesystem: true. Prometheus ya escribia solo en /prometheus
+#       (emptyDir); a Grafana se le agregaron emptyDir en /var/lib/grafana,
+#       /var/log/grafana y /tmp.
+#   no-anti-affinity (calculadora blue/green, 2 replicas)
+#       podAntiAffinity preferred por kubernetes.io/hostname. Es 'preferred' y
+#       no 'required' porque minikube tiene un solo nodo: con 'required' la
+#       segunda replica quedaria Pending.
+#
+# Endurecimiento extra (no lo pedia KubeLinter): allowPrivilegeEscalation: false,
+# capabilities.drop [ALL], seccompProfile RuntimeDefault y
+# automountServiceAccountToken: false en los pods que no usan la API.
+
+################################################################################
+# ANTES (manifiestos de la entrega anterior)
+################################################################################
+Error: found 8 lint errors
+KubeLinter 0.8.3
+
+/src/k8s/deployment-blue.yaml: (object: <no namespace>/calculadora-blue apps/v1, Kind=Deployment) object has 2 replicas but does not specify inter pod anti-affinity (check: no-anti-affinity, remediation: Specify anti-affinity in your pod specification to ensure that the orchestrator attempts to schedule replicas on different nodes. Using podAntiAffinity, specify a labelSelector that matches pods for the deployment, and set the topologyKey to kubernetes.io/hostname. Refer to https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity for details.)
+
+/src/k8s/deployment-blue.yaml: (object: <no namespace>/calculadora-blue apps/v1, Kind=Deployment) container "calculadora" does not have a read-only root file system (check: no-read-only-root-fs, remediation: Set readOnlyRootFilesystem to true in the container securityContext.)
+
+/src/k8s/deployment-blue.yaml: (object: <no namespace>/calculadora-blue apps/v1, Kind=Deployment) container "calculadora" is not set to runAsNonRoot (check: run-as-non-root, remediation: Set runAsUser to a non-zero number and runAsNonRoot to true in your pod or container securityContext. Refer to https://kubernetes.io/docs/tasks/configure-pod-container/security-context/ for details.)
+
+/src/k8s/deployment-green.yaml: (object: <no namespace>/calculadora-green apps/v1, Kind=Deployment) object has 2 replicas but does not specify inter pod anti-affinity (check: no-anti-affinity, remediation: Specify anti-affinity in your pod specification to ensure that the orchestrator attempts to schedule replicas on different nodes. Using podAntiAffinity, specify a labelSelector that matches pods for the deployment, and set the topologyKey to kubernetes.io/hostname. Refer to https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity for details.)
+
+/src/k8s/deployment-green.yaml: (object: <no namespace>/calculadora-green apps/v1, Kind=Deployment) container "calculadora" does not have a read-only root file system (check: no-read-only-root-fs, remediation: Set readOnlyRootFilesystem to true in the container securityContext.)
+
+/src/k8s/deployment-green.yaml: (object: <no namespace>/calculadora-green apps/v1, Kind=Deployment) container "calculadora" is not set to runAsNonRoot (check: run-as-non-root, remediation: Set runAsUser to a non-zero number and runAsNonRoot to true in your pod or container securityContext. Refer to https://kubernetes.io/docs/tasks/configure-pod-container/security-context/ for details.)
+
+/src/monitoring/grafana.yaml: (object: <no namespace>/grafana apps/v1, Kind=Deployment) container "grafana" does not have a read-only root file system (check: no-read-only-root-fs, remediation: Set readOnlyRootFilesystem to true in the container securityContext.)
+
+/src/monitoring/prometheus.yaml: (object: <no namespace>/prometheus apps/v1, Kind=Deployment) container "prometheus" does not have a read-only root file system (check: no-read-only-root-fs, remediation: Set readOnlyRootFilesystem to true in the container securityContext.)
+
+
+################################################################################
+# DESPUES
+################################################################################
+KubeLinter 0.8.3
+
+No lint errors found!
