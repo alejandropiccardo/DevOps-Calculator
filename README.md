@@ -833,7 +833,7 @@ En PowerShell: `$env:APP_VARIANTE = "v1"; python -m pytest tests/ -v`.
 Por el Ingress (gateway APISIX del cluster):
 
 ```
-http://calculadora-grupo5.reto-ucu.net/docs
+https://calculadora-grupo5.reto-ucu.net/docs
 ```
 
 `*.reto-ucu.net` es un DNS wildcard que apunta al gateway; el host se elige en `ingress.host` de los

@@ -194,11 +194,15 @@ kubectl get svc calculadora -n obligatorio-grupo5 -o jsonpath='{.metadata.annota
 La app se expone con un **Ingress** sobre el gateway APISIX del cluster:
 
 ```
-http://calculadora-grupo5.reto-ucu.net/docs
+https://calculadora-grupo5.reto-ucu.net/docs
 ```
 
 `*.reto-ucu.net` es un DNS wildcard que resuelve al gateway, asi que no hay que registrar nada:
-alcanza con elegir un host libre en `ingress.host` de los values. El Ingress apunta al **Service**,
+alcanza con elegir un host libre en `ingress.host` de los values.
+
+> **Usar HTTPS, no HTTP.** El gateway sirve la app por 443 con certificado valido. El puerto 80
+> de esa misma IP lo atiende otro servicio ajeno al cluster, asi que `http://` devuelve 200 con
+> una pagina que no es la tuya: es facil confundirlo con un Ingress mal configurado. El Ingress apunta al **Service**,
 no a los Deployments, asi que conmutar blue/green tambien cambia lo que sirve la URL publica, sin
 tocar el Ingress.
 
