@@ -9,7 +9,10 @@
 #   "docker build" en cambio si funciona, porque el CLI lee el contexto y se lo
 #   manda al daemon por el socket. Por eso el socket se usa solo para
 #   build/push, y Semgrep, Snyk, kubectl y Helm van instalados aca.
-FROM jenkins/jenkins:2.516.1-lts-jdk17
+# LTS. Importante que sea reciente: el update center sirve siempre la ultima
+# version de cada plugin, y los plugins actuales exigen Jenkins >= 2.516.3.
+# Con una base mas vieja la instalacion de plugins falla en cascada.
+FROM jenkins/jenkins:2.541.3-lts-jdk17
 
 USER root
 

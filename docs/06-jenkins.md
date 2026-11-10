@@ -236,6 +236,31 @@ del contenedor **es el propio Jenkins**. Significa que la credencial `kubeconfig
 corte usa un umbral más estricto que el informe, así que puede frenar por algo que no aparece en
 las primeras líneas.
 
+**Snyk: `Failed to test pip project` (SNYK-CLI-0000).** El mensaje es genérico; la causa real sale
+corriendo el mismo comando con `-d`. Hay dos trampas, y la etapa 3 resuelve las dos:
+
+| Error con `-d` | Causa | Solución aplicada |
+|---|---|---|
+| `spawn python ENOENT` | el plugin de pip invoca `python` y la imagen solo trae `python3` | `--command="$PWD/.snyk-$v/bin/python"` |
+| `Missing required packages` (422) | Snyk resuelve el árbol leyendo los paquetes **instalados**, no el `requirements.txt` | un venv por variante con las dependencias instaladas antes de escanear |
+
+Para reproducirlo a mano dentro del contenedor:
+
+```bash
+docker exec -w /var/jenkins_home/workspace/<job> jenkins snyk test --file=app/v1/requirements.txt --package-manager=pip -d
+```
+
+**Los plugins fallan en cascada al instalarse, con decenas de errores rojos.** La causa raíz es una
+sola y está en el log: `- Jenkins (X.Y.Z) or higher required`. El update center sirve siempre la
+última versión de cada plugin, así que una imagen base vieja los rompe todos y el resto son
+dependencias del primero que falló. Se arregla subiendo el `FROM` del
+[`jenkins/Dockerfile`](../jenkins/Dockerfile) y reconstruyendo con el volumen limpio
+(`docker compose down -v && docker compose build --no-cache`). Para ver la causa sin la cascada:
+
+```bash
+docker logs jenkins 2>&1 | grep "or higher required"
+```
+
 **`docker: permission denied` en la etapa 5.** El contenedor tiene que correr como root para
 escribir en el socket del host. Es lo que hace el `Dockerfile` (`USER root`) y es aceptable en un
 laboratorio local; en producción se usaría un agente dedicado en el grupo `docker`, no el

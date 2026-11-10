@@ -113,6 +113,19 @@ pipeline {
                     sh '''
                         snyk auth "$SNYK_TOKEN" >/dev/null 2>&1
 
+                        # Snyk resuelve el arbol de dependencias de pip
+                        # inspeccionando los paquetes INSTALADOS, no leyendo el
+                        # requirements.txt. Por eso cada variante se instala en su
+                        # propio venv y se le pasa ese interprete con --command.
+                        # Sin el venv falla con "Missing required packages"; sin
+                        # --command falla con "spawn python ENOENT", porque la
+                        # imagen trae python3 pero no python.
+                        for v in v1 v2; do
+                            python3 -m venv ".snyk-$v"
+                            ".snyk-$v/bin/pip" install --quiet --upgrade pip
+                            ".snyk-$v/bin/pip" install --quiet -r "app/$v/requirements.txt"
+                        done
+
                         echo "--- Informe completo de dependencias ---"
                         set +e
                         for v in v1 v2; do
@@ -120,6 +133,7 @@ pipeline {
                             snyk test \
                                 --file=app/$v/requirements.txt \
                                 --package-manager=pip \
+                                --command="$PWD/.snyk-$v/bin/python" \
                                 --severity-threshold=low
                         done | tee reports/snyk-ci.txt
                         set -e
@@ -134,6 +148,7 @@ pipeline {
                             snyk test \
                                 --file=app/$v/requirements.txt \
                                 --package-manager=pip \
+                                --command="$PWD/.snyk-$v/bin/python" \
                                 --severity-threshold=critical
                         done
                     '''
@@ -254,7 +269,7 @@ pipeline {
             echo 'Si fallo en Semgrep o Snyk, el detalle esta en los artefactos: reports/semgrep-ci.txt y reports/snyk-ci.txt'
         }
         cleanup {
-            sh 'rm -rf .venv || true'
+            sh 'rm -rf .venv .snyk-v1 .snyk-v2 || true'
         }
     }
 }

@@ -67,3 +67,7 @@ reports/smoke-test.txt
 # kubeconfigs: NUNCA versionar (traen token de acceso al cluster)
 grupo5.yaml
 ucu.yaml
+
+# venv temporales que crea la etapa de Snyk del pipeline
+.snyk-v1/
+.snyk-v2/
