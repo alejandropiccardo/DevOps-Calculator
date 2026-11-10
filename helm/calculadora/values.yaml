@@ -32,6 +32,20 @@ service:
   puertoDestino: 8000
   # nodePort: 30080   # solo tiene efecto si tipo es NodePort
 
+# Expone la app con un hostname propio por el gateway APISIX del cluster de la
+# UCU. *.reto-ucu.net es un DNS wildcard que apunta al gateway, asi que no hay
+# que registrar nada: alcanza con elegir un host libre.
+#
+# Esta es la forma correcta de exponer en un cluster compartido entre grupos:
+# el hostname los distingue sobre el 443 comun, sin reservar un nodePort global.
+ingress:
+  habilitado: true
+  clase: apisix
+  host: calculadora-grupo5.reto-ucu.net
+  ruta: /
+  tipoRuta: Prefix
+  anotaciones: {}
+
 recursos:
   requests:
     cpu: 50m

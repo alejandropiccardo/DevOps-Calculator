@@ -830,6 +830,17 @@ En PowerShell: `$env:APP_VARIANTE = "v1"; python -m pytest tests/ -v`.
 
 ### Acceder a la app desplegada
 
+Por el Ingress (gateway APISIX del cluster):
+
+```
+http://calculadora-grupo5.reto-ucu.net/docs
+```
+
+`*.reto-ucu.net` es un DNS wildcard que apunta al gateway; el host se elige en `ingress.host` de los
+values. El Ingress apunta al Service, asi que el switch blue/green tambien cambia lo que sirve la URL.
+
+Sin pasar por el gateway:
+
 ```bash
 kubectl port-forward -n obligatorio-grupo5 svc/calculadora 8080:80
 ```

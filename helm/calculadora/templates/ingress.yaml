@@ -1,0 +1,42 @@
+{{- /*
+Expone la app con un hostname propio a traves del gateway APISIX del cluster.
+
+Apunta al Service, no a los Deployments. Eso importa: el blue/green vive en el
+selector del Service, asi que conmutar de entorno tambien cambia lo que sirve
+este Ingress, sin tocarlo ni recrearlo.
+
+Es ademas la forma correcta de exponer en un cluster compartido: el hostname
+distingue grupos sobre el puerto 443 comun, en vez de reservar un nodePort
+global que chocaria con otro equipo.
+*/ -}}
+{{- if .Values.ingress.habilitado }}
+{{- if not .Values.ingress.host }}
+{{- fail "ingress.habilitado es true pero ingress.host esta vacio" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "calculadora.fullname" . }}
+  labels:
+    {{- include "calculadora.labels" . | nindent 4 }}
+  annotations:
+    # Mismo dato que en el Service: deja asentado en el cluster que entorno
+    # esta sirviendo, para verificarlo sin mirar los values del release.
+    calculadora/entorno-activo: {{ .Values.entornoActivo | quote }}
+    {{- with .Values.ingress.anotaciones }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.clase }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.ruta }}
+            pathType: {{ .Values.ingress.tipoRuta }}
+            backend:
+              service:
+                name: {{ include "calculadora.fullname" . }}
+                port:
+                  number: {{ .Values.service.puerto }}
+{{- end }}

@@ -191,6 +191,19 @@ kubectl get svc calculadora -n obligatorio-grupo5 -o jsonpath='{.metadata.annota
 
 ## 8. Acceder a la app desplegada
 
+La app se expone con un **Ingress** sobre el gateway APISIX del cluster:
+
+```
+http://calculadora-grupo5.reto-ucu.net/docs
+```
+
+`*.reto-ucu.net` es un DNS wildcard que resuelve al gateway, asi que no hay que registrar nada:
+alcanza con elegir un host libre en `ingress.host` de los values. El Ingress apunta al **Service**,
+no a los Deployments, asi que conmutar blue/green tambien cambia lo que sirve la URL publica, sin
+tocar el Ingress.
+
+Para verlo sin pasar por el gateway (util para aislar si un problema es del Ingress o de la app):
+
 El Service es `ClusterIP` a propósito. La separación entre grupos en el cluster de la UCU es por
 **namespace**: nosotros somos `obligatorio-grupo5`, de ahí el nombre del kubeconfig. El namespace
 aísla los *nombres* de los objetos, así que varios grupos pueden tener un Service llamado

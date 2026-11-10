@@ -12,6 +12,9 @@ Los dos entornos estan desplegados; el Service apunta solo a uno.
     kubectl get endpoints {{ include "calculadora.fullname" . }} -n {{ .Release.Namespace }} -o wide
 
   Acceder a la app:
+{{- if .Values.ingress.habilitado }}
+    http://{{ .Values.ingress.host }}/docs
+{{- end }}
     kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "calculadora.fullname" . }} 8080:{{ .Values.service.puerto }}
     curl http://127.0.0.1:8080/
 
