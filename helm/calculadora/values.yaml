@@ -24,6 +24,14 @@ entornos:
     appVersion: "2.2"
     replicas: 2
 
+# Con la cuota al limite, un maxSurge > 0 no puede crear el pod nuevo y el
+# rollout se traba. Con maxSurge 0 se libera un pod primero y despues se crea
+# el reemplazo: nunca necesita cuota extra. Cuesta tener 1 replica por unos
+# segundos durante la actualizacion.
+estrategia:
+  maxSurge: 0
+  maxUnavailable: 1
+
 service:
   # ClusterIP por defecto: el cluster de la UCU es compartido entre grupos y un
   # nodePort fijo chocaria con otro equipo. Para acceder se usa port-forward.
@@ -46,9 +54,13 @@ ingress:
   tipoRuta: Prefix
   anotaciones: {}
 
+# El namespace tiene una ResourceQuota (student-quota) que topea requests.cpu
+# en 200m para TODO el namespace. Con 4 pods a 50m se llenaba exacto y ningun
+# rolling update podia arrancar: para crear el pod nuevo hace falta cuota libre.
+# 25m es ademas el default del LimitRange del namespace.
 recursos:
   requests:
-    cpu: 50m
+    cpu: 25m
     memory: 64Mi
   limits:
     cpu: 250m

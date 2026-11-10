@@ -280,6 +280,23 @@ falla es el comando de diagnostico que sigue. El ServiceAccount del grupo no tie
 La etapa usa esa, y ademas con `|| true`: un despliegue correcto no puede quedar en rojo porque
 falte un permiso de lectura.
 
+**La etapa 6 se queda 5 minutos y muere en el timeout.** No es lentitud: es la `ResourceQuota`
+`student-quota` del namespace, que topea `requests.cpu` en **200m para todo el namespace**. Un
+rolling update necesita cuota libre para crear el pod nuevo antes de matar al viejo; si la cuota
+esta al tope, no crea nada, no mata nada, y se traba hasta el timeout. Para verlo:
+
+```bash
+kubectl describe resourcequota -n obligatorio-grupo5
+```
+
+```bash
+kubectl get events -n obligatorio-grupo5 --sort-by=.lastTimestamp | grep FailedCreate
+```
+
+El chart lo evita por dos lados: `requests.cpu` de 25m (el default del `LimitRange` del namespace,
+4 pods = 100m de 200m) y `maxSurge: 0`, que libera un pod antes de crear el reemplazo y por lo tanto
+nunca necesita cuota extra.
+
 **`docker: permission denied` en la etapa 5.** El contenedor tiene que correr como root para
 escribir en el socket del host. Es lo que hace el `Dockerfile` (`USER root`) y es aceptable en un
 laboratorio local; en producción se usaría un agente dedicado en el grupo `docker`, no el

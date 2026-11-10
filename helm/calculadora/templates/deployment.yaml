@@ -15,6 +15,12 @@ metadata:
     version: {{ $color }}
 spec:
   replicas: {{ $cfg.replicas }}
+  # El namespace tiene una ResourceQuota ajustada: con maxSurge > 0 el pod
+  # nuevo no entra en la cuota y el rollout se traba hasta el timeout.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      {{- toYaml $raiz.Values.estrategia | nindent 6 }}
   selector:
     matchLabels:
       {{- include "calculadora.selectorLabels" $raiz | nindent 6 }}
