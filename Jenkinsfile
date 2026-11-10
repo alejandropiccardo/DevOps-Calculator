@@ -40,8 +40,16 @@ pipeline {
         IMAGEN    = 'alepiccardo/calculadora'
         NAMESPACE = 'obligatorio-grupo5'
         RELEASE   = 'calculadora'
-        // TAG_V1 y TAG_V2 no se pueden definir aca: se calculan a partir del
-        // hash del commit en la etapa 1, cuando ya existe el repo clonado.
+
+        // UNICA fuente de verdad de la version de cada variante. De aca salen
+        // tanto el tag de la imagen como el APP_VERSION que la app reporta por
+        // la API, asi que no se pueden desincronizar. Para subir de version se
+        // cambia solo aca.
+        VERSION_V1 = '1.2'
+        VERSION_V2 = '2.2'
+
+        // TAG_V1 y TAG_V2 no se pueden definir aca: necesitan el hash del
+        // commit, que recien existe despues del checkout (etapa 1).
     }
 
     stages {
@@ -56,8 +64,8 @@ pipeline {
                     // sobre el mismo commit da el mismo tag (mismo codigo, misma
                     // imagen) en vez de una version nueva que no cambia nada.
                     env.COMMIT = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
-                    env.TAG_V1 = "1.2-${env.COMMIT}"
-                    env.TAG_V2 = "2.2-${env.COMMIT}"
+                    env.TAG_V1 = "${env.VERSION_V1}-${env.COMMIT}"
+                    env.TAG_V2 = "${env.VERSION_V2}-${env.COMMIT}"
                     // Deja el commit visible en el historial de builds de Jenkins.
                     currentBuild.description = "${env.COMMIT} -> ${params.ENTORNO_ACTIVO}"
                 }
@@ -189,17 +197,17 @@ pipeline {
                         echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USUARIO" --password-stdin
 
                         # Cada imagen lleva dos tags:
-                        #   1.2-<commit>  inmutable, es el que despliega Helm
-                        #   1.2           movil, apunta al ultimo build de esa
-                        #                 version (comodidad para "docker pull"
-                        #                 a mano; el cluster nunca lo usa)
-                        docker build -t "$IMAGEN:$TAG_V1" -t "$IMAGEN:1.2" app/v1
-                        docker build -t "$IMAGEN:$TAG_V2" -t "$IMAGEN:2.2" app/v2
+                        #   <version>-<commit>  inmutable, es el que despliega Helm
+                        #   <version>           movil, apunta al ultimo build de esa
+                        #                       version (comodidad para un "docker
+                        #                       pull" a mano; el cluster no lo usa)
+                        docker build -t "$IMAGEN:$TAG_V1" -t "$IMAGEN:$VERSION_V1" app/v1
+                        docker build -t "$IMAGEN:$TAG_V2" -t "$IMAGEN:$VERSION_V2" app/v2
 
                         docker push "$IMAGEN:$TAG_V1"
-                        docker push "$IMAGEN:1.2"
+                        docker push "$IMAGEN:$VERSION_V1"
                         docker push "$IMAGEN:$TAG_V2"
-                        docker push "$IMAGEN:2.2"
+                        docker push "$IMAGEN:$VERSION_V2"
 
                         docker logout
                     '''
@@ -220,6 +228,8 @@ pipeline {
                             --set imagen.pullPolicy=Always \
                             --set entornos.blue.tag="$TAG_V1" \
                             --set entornos.green.tag="$TAG_V2" \
+                            --set entornos.blue.appVersion="$VERSION_V1" \
+                            --set entornos.green.appVersion="$VERSION_V2" \
                             --set entornoActivo="$ENTORNO_ACTIVO" \
                             --wait --timeout 5m
 

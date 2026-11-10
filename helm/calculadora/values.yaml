@@ -10,10 +10,17 @@ imagen:
 #   helm upgrade calculadora ./helm/calculadora --set entornoActivo=green
 entornoActivo: blue
 
-# Los dos entornos conviven en el cluster. Los tags de aca son solo el default
-# para un "helm install" a mano: el pipeline los sobrescribe con el tag del
-# commit (--set entornos.blue.tag=1.2-a1b2c3d), que es lo que da trazabilidad
-# entre la imagen que corre y el codigo que la produjo.
+# Los dos entornos conviven en el cluster.
+#
+# tag y appVersion de aca son SOLO el default para un "helm install" a mano. En
+# el pipeline los dos salen de VERSION_V1/VERSION_V2 del Jenkinsfile, que es la
+# unica fuente de verdad:
+#
+#   tag        -> 1.2-a1b2c3d   la imagen que corre (trazable al commit)
+#   appVersion -> 1.2           lo que la app reporta por la API
+#
+# Al salir ambos del mismo valor no se pueden desincronizar, que era el riesgo:
+# que la imagen dijera 2.3 y la API siguiera respondiendo "version":"2.2".
 entornos:
   blue:
     tag: "1.2"

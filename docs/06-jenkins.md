@@ -148,6 +148,22 @@ env.COMMIT = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim
 env.TAG_V1 = "1.2-${env.COMMIT}"
 ```
 
+**De donde sale el numero de version.** De `VERSION_V1` y `VERSION_V2` en el bloque `environment`
+del [`Jenkinsfile`](../Jenkinsfile), y de ningun otro lado. De ahi salen las dos cosas que tienen que
+coincidir:
+
+| Sale de | Va a | Efecto |
+|---|---|---|
+| `VERSION_V2` | `TAG_V2` = `2.2-<commit>` | el tag de la imagen |
+| `VERSION_V2` | `--set entornos.green.appVersion` | el ConfigMap, y de ahi `APP_VERSION` |
+
+Para subir una version se cambia **solo esa linea**. Al salir ambas del mismo valor no se pueden
+desincronizar, que era el riesgo real: que la imagen se llamara `2.3-abc` y la API siguiera
+respondiendo `"version":"2.2"` porque el ConfigMap quedo viejo, sin que nada avisara.
+
+Los valores de `values.yaml` y el `os.getenv("APP_VERSION", "1.2")` de `main.py` quedan como
+defaults: el primero para un `helm install` a mano, el segundo para correr la app fuera de Kubernetes.
+
 **Por qué el commit y no el número de build.** Con `1.2.${BUILD_NUMBER}` el tag es único pero no
 dice nada: para saber qué código corre en el cluster hay que entrar a Jenkins, buscar ese build y
 leer qué commit clonó — y si el build se borró por el `logRotator`, se perdió. Con el hash, el
