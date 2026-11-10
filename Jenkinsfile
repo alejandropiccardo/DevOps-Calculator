@@ -38,11 +38,10 @@ pipeline {
 
     environment {
         IMAGEN    = 'alejandropiccardo/calculadora'
-        // Tags inmutables: cada build publica su propia version rastreable.
-        TAG_V1    = "1.2.${env.BUILD_NUMBER}"
-        TAG_V2    = "2.2.${env.BUILD_NUMBER}"
         NAMESPACE = 'obligatorio-grupo5'
         RELEASE   = 'calculadora'
+        // TAG_V1 y TAG_V2 no se pueden definir aca: se calculan a partir del
+        // hash del commit en la etapa 1, cuando ya existe el repo clonado.
     }
 
     stages {
@@ -50,12 +49,28 @@ pipeline {
         stage('1. Clonar repositorio') {
             steps {
                 checkout scm
+                script {
+                    // El tag de la imagen sale del commit, no del numero de build.
+                    // Asi la imagen que corre en el cluster se puede rastrear hasta
+                    // el codigo exacto que la produjo, y volver a correr el pipeline
+                    // sobre el mismo commit da el mismo tag (mismo codigo, misma
+                    // imagen) en vez de una version nueva que no cambia nada.
+                    env.COMMIT = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
+                    env.TAG_V1 = "1.2-${env.COMMIT}"
+                    env.TAG_V2 = "2.2-${env.COMMIT}"
+                    // Deja el commit visible en el historial de builds de Jenkins.
+                    currentBuild.description = "${env.COMMIT} -> ${params.ENTORNO_ACTIVO}"
+                }
                 sh '''
                     mkdir -p reports
-                    echo "Commit:  $(git rev-parse --short HEAD)"
-                    echo "Rama:    $(git rev-parse --abbrev-ref HEAD)"
+                    echo "Commit:  $(git rev-parse HEAD)"
+                    echo "Rama:    ${GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
                     echo "Autor:   $(git log -1 --format='%an <%ae>')"
                     echo "Mensaje: $(git log -1 --format='%s')"
+                    echo ""
+                    echo "Imagenes que va a publicar este build:"
+                    echo "  $IMAGEN:$TAG_V1"
+                    echo "  $IMAGEN:$TAG_V2"
                 '''
             }
         }
@@ -158,6 +173,11 @@ pipeline {
                     sh '''
                         echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USUARIO" --password-stdin
 
+                        # Cada imagen lleva dos tags:
+                        #   1.2-<commit>  inmutable, es el que despliega Helm
+                        #   1.2           movil, apunta al ultimo build de esa
+                        #                 version (comodidad para "docker pull"
+                        #                 a mano; el cluster nunca lo usa)
                         docker build -t "$IMAGEN:$TAG_V1" -t "$IMAGEN:1.2" app/v1
                         docker build -t "$IMAGEN:$TAG_V2" -t "$IMAGEN:2.2" app/v2
 
@@ -225,7 +245,8 @@ pipeline {
             archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true, fingerprint: true
         }
         success {
-            echo "OK. Imagenes publicadas: ${IMAGEN}:${TAG_V1} y ${IMAGEN}:${TAG_V2}"
+            echo "OK. Commit desplegado: ${env.COMMIT}"
+            echo "Imagenes publicadas: ${IMAGEN}:${TAG_V1} y ${IMAGEN}:${TAG_V2}"
             echo "Entorno activo en el cluster: ${params.ENTORNO_ACTIVO}"
         }
         failure {

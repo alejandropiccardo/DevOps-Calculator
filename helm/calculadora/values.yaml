@@ -10,8 +10,10 @@ imagen:
 #   helm upgrade calculadora ./helm/calculadora --set entornoActivo=green
 entornoActivo: blue
 
-# Los dos entornos conviven en el cluster. El pipeline sobrescribe los tags con
-# el numero de build (--set entornos.blue.tag=...).
+# Los dos entornos conviven en el cluster. Los tags de aca son solo el default
+# para un "helm install" a mano: el pipeline los sobrescribe con el tag del
+# commit (--set entornos.blue.tag=1.2-a1b2c3d), que es lo que da trazabilidad
+# entre la imagen que corre y el codigo que la produjo.
 entornos:
   blue:
     tag: "1.2"

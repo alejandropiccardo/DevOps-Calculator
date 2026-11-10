@@ -130,7 +130,43 @@ Cada build deja en **Artifacts**: `reports/semgrep-ci.txt`, `reports/snyk-ci.txt
 
 ---
 
-## 6. El despliegue blue/green desde el pipeline
+## 6. Trazabilidad: el tag de la imagen es el commit
+
+Cada build publica cuatro tags en DockerHub:
+
+| Tag | Mutable | Para qué |
+|---|---|---|
+| `1.2-a1b2c3d` | no | v1 construida desde el commit `a1b2c3d`. **Es el que despliega Helm.** |
+| `2.2-a1b2c3d` | no | idem v2 |
+| `1.2` | sí | último build de v1. Comodidad para un `docker pull` a mano. |
+| `2.2` | sí | idem v2 |
+
+El tag se calcula en la etapa 1, después del `checkout`:
+
+```groovy
+env.COMMIT = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
+env.TAG_V1 = "1.2-${env.COMMIT}"
+```
+
+**Por qué el commit y no el número de build.** Con `1.2.${BUILD_NUMBER}` el tag es único pero no
+dice nada: para saber qué código corre en el cluster hay que entrar a Jenkins, buscar ese build y
+leer qué commit clonó — y si el build se borró por el `logRotator`, se perdió. Con el hash, el
+camino es directo y en los dos sentidos:
+
+```bash
+kubectl get deploy calculadora-green -n obligatorio-grupo5 -o jsonpath='{..image}'
+```
+
+Eso devuelve `alejandropiccardo/calculadora:2.2-a1b2c3d`, y `git show a1b2c3d` es el código exacto.
+De paso, volver a correr el pipeline sobre el mismo commit produce el mismo tag: mismo código,
+misma imagen, en vez de una versión nueva que no cambió nada.
+
+El número de build no se pierde: queda en la descripción del build de Jenkins
+(`currentBuild.description`), junto al entorno al que se conmutó.
+
+---
+
+## 7. El despliegue blue/green desde el pipeline
 
 El chart deja **los dos entornos corriendo** y el Service apunta a uno. Cambiar de versión en
 producción es volver a correr el pipeline con el otro valor de `ENTORNO_ACTIVO`, o directamente:
@@ -153,10 +189,29 @@ kubectl get svc calculadora -n obligatorio-grupo5 -o jsonpath='{.metadata.annota
 
 ---
 
-## 7. Acceder a la app desplegada
+## 8. Acceder a la app desplegada
 
-El Service es `ClusterIP` a propósito: el cluster de la UCU es compartido entre grupos y un
-`nodePort` fijo chocaría con otro equipo.
+El Service es `ClusterIP` a propósito. La separación entre grupos en el cluster de la UCU es por
+**namespace**: nosotros somos `obligatorio-grupo5`, de ahí el nombre del kubeconfig. El namespace
+aísla los *nombres* de los objetos, así que varios grupos pueden tener un Service llamado
+`calculadora` sin pisarse.
+
+Un `nodePort`, en cambio, **no es namespaced**: se reserva en la IP de todos los nodos, por fuera de
+cualquier namespace. Si nosotros pedimos el 30080 y otro grupo pide el mismo, el segundo Service no
+se crea:
+
+```
+The Service "calculadora" is invalid: spec.ports[0].nodePort: Invalid value: 30080: provided port is already allocated
+```
+
+Con `ClusterIP` el Service solo existe adentro del cluster y se llega por `port-forward`, que es un
+túnel por la API de Kubernetes y no reserva nada compartido. El chart igual soporta `NodePort`
+(`service.tipo` y `service.nodePort` en los values), que es lo que se usaba en minikube.
+
+La forma correcta de exponerlo con una URL propia por grupo sería un **Ingress** con host tipo
+`calculadora-grupo5.<dominio>`: el hostname sí distingue grupos sobre un único puerto 80/443. El
+ServiceAccount tiene permisos para crear Ingress, pero no sabemos qué controlador ni qué dominio
+usa la cátedra, así que queda como la extensión natural cuando lo confirmen.
 
 ```bash
 export KUBECONFIG=$HOME/.kube/ucu.yaml
@@ -172,7 +227,7 @@ curl http://127.0.0.1:8080/
 
 ---
 
-## 8. Problemas conocidos
+## 9. Problemas conocidos
 
 **`kubectl` devuelve HTML de login.** Sin `KUBECONFIG`, kubectl va a `localhost:8080`, que dentro
 del contenedor **es el propio Jenkins**. Significa que la credencial `kubeconfig-ucu` no se cargó.
@@ -198,7 +253,7 @@ Puede haber más de una: el mensaje de error dice cuál.
 
 ---
 
-## 9. Apagar Jenkins
+## 10. Apagar Jenkins
 
 ```bash
 cd jenkins && docker compose down
