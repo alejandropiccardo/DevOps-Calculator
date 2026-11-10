@@ -105,11 +105,12 @@ $ curl "http://127.0.0.1:18081/suma?a=2&b=3"
 
 ## 3. Integración y entrega continua (Jenkins)
 
-<!-- SECCIÓN LIBRE: la completa el compañero a cargo de Jenkins. -->
 
 ### 3.a Pipeline en Jenkins
 
 ### 3.b Etapas del pipeline
+
+<img width="1568" height="324" alt="image" src="https://github.com/user-attachments/assets/ca076e1c-6eed-4ccd-893d-cd1ece420d26" />
 
 ### 3.c Jenkinsfile
 
@@ -302,31 +303,7 @@ Grafana y controles de seguridad en el código, la imagen, el cluster y la ejecu
 
 ### 6.b Arquitectura final
 
-```mermaid
-flowchart LR
-    U([Cliente])
-
-    subgraph K8S["Cluster Kubernetes"]
-        subgraph OBS["Monitoreo"]
-            GR[Grafana] -->|consultas| P[Prometheus]
-        end
-
-        subgraph SEC["Seguridad"]
-            KY["Kyverno<br/>4 políticas"]
-            F["Falco<br/>DaemonSet"]
-        end
-
-        subgraph APP["Aplicación blue/green"]
-            S[Service calculadora] -->|activo| B["Pods blue v1.2<br/>+ ConfigMap"]
-            S -.->|al hacer el switch| G["Pods green v2.2<br/>+ ConfigMap"]
-        end
-    end
-
-    U -->|NodePort 30080| S
-    P -->|"/metrics, CPU y memoria"| APP
-    KY -->|valida al admitir| APP
-    F -->|observa syscalls| APP
-```
+<img width="1568" height="1938" alt="image" src="https://github.com/user-attachments/assets/65d24297-d6ea-49d4-afe7-38dfce8894dc" />
 
 ### 6.c Pipeline implementado
 
