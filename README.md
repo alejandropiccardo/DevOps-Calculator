@@ -19,6 +19,7 @@ ejecución. El detalle de la aplicación está en la sección 1 de este document
 |-----------------------------|----------------------------------------------------|
 | 1. Docker                   | [`docs/01-docker.md`](docs/01-docker.md)           |
 | 2. Kubernetes               | [`docs/02-kubernetes.md`](docs/02-kubernetes.md)   |
+| 3. Pipeline con Jenkins     | [`docs/06-jenkins.md`](docs/06-jenkins.md)         |
 | 4. Prometheus y Grafana     | [`docs/04-monitoreo.md`](docs/04-monitoreo.md)     |
 | 5. Semgrep, Snyk, Kyverno, Falco | [`docs/05-seguridad.md`](docs/05-seguridad.md) |
 
@@ -31,7 +32,18 @@ ejecución. El detalle de la aplicación está en la sección 1 de este document
 ./scripts/limpiar.sh          # borra los recursos (--todo borra también minikube)
 ```
 
-Requisitos: Docker, kubectl, minikube y Helm (solo para instalar Falco).
+Requisitos: Docker, kubectl, minikube y Helm.
+
+> **Dónde se despliega.** Hay dos destinos y no se mezclan:
+>
+> | Destino | Cuándo | Cómo |
+> |---|---|---|
+> | **minikube**, en tu máquina | Entregas 1 a 3: desarrollo, monitoreo, Kyverno, Falco | `kubectl apply` + `minikube image load` (secciones 3 a 8) |
+> | **Cluster UCU**, remoto | Entrega 4: el despliegue real | Jenkins + Helm, imagen desde DockerHub (sección 9) |
+>
+> Los comandos de `minikube` de este README siguen siendo válidos para el camino local. En el cluster
+> de la UCU no aplican: no hay `minikube image load` ni NodePort. Ver
+> [`docs/06-jenkins.md`](docs/06-jenkins.md).
 
 ## b. Arquitectura final
 
@@ -63,8 +75,23 @@ flowchart LR
 
 ## c. Pipeline implementado
 
-El pipeline de Jenkins está a cargo de otro integrante del grupo. Las herramientas que usa ya se pueden correr
-con `scripts/escanear-semgrep.sh` y `scripts/escanear-snyk.sh`.
+Pipeline de Jenkins definido en [`Jenkinsfile`](Jenkinsfile), con siete etapas. Las etapas 2 y 3
+**detienen la ejecución y reportan el error** ante hallazgos críticos, que es lo que pide el punto 3.e
+de la consigna.
+
+| # | Etapa | Herramienta | Corta el pipeline si... |
+|---|---|---|---|
+| 1 | Clonar repositorio | git | no puede clonar |
+| 2 | Análisis estático | Semgrep | hay hallazgos de severidad `ERROR` |
+| 3 | Dependencias | Snyk | hay vulnerabilidades **críticas** |
+| 4 | Construcción y test | pytest (23 tests) | falla algún test |
+| 5 | Imagen Docker | docker | falla el build o el push a DockerHub |
+| 6 | Despliegue | Helm | el rollout no queda listo en 5 min |
+| 7 | Smoke test | kubectl + curl | el Service no responde |
+
+Cada etapa deja su log en la consola de Jenkins, y los informes completos quedan archivados como
+artefactos del build (`reports/`). El despliegue va al **cluster remoto de la UCU**, no a minikube.
+Puesta en marcha, credenciales y detalle en [`docs/06-jenkins.md`](docs/06-jenkins.md).
 
 ## d. Métricas y dashboard de Grafana
 
@@ -198,11 +225,7 @@ desde cero, sin depender del historial de git.
 
 ## 3. Requisitos previos
 
-- Docker
-- kubectl
-- minikube
-
-Verificar que el cluster esté corriendo:
+Para el camino **local** (secciones 4 a 8): Docker, kubectl, minikube y Helm.
 
 ```bash
 minikube start
@@ -212,9 +235,26 @@ minikube start
 kubectl get nodes
 ```
 
+Para el camino del **cluster de la UCU** (sección 9) no hace falta minikube: Jenkins corre en un
+contenedor con kubectl y Helm adentro, y se autentica con el kubeconfig del grupo. Si lo querés usar a
+mano desde tu terminal:
+
+```bash
+export KUBECONFIG=$HOME/.kube/ucu.yaml
+```
+
+```bash
+kubectl get pods -n obligatorio-grupo5
+```
+
+> El kubeconfig **no está en el repo**: contiene un token de acceso al cluster. Vive en
+> `~/.kube/ucu.yaml` y está en el `.gitignore`.
+
 ---
 
-## 4. Despliegue paso a paso
+## 4. Despliegue paso a paso (minikube, local)
+
+Este es el camino **local**. Para el cluster de la UCU, ver la sección 9.
 
 ### Paso 1 — Construir las imágenes
 
@@ -717,3 +757,82 @@ Además de los contadores de operaciones, la app expone el histograma `calculado
 El dashboard exportado está en [`grafana/dashboard.json`](grafana/dashboard.json) y es el mismo que se
 carga desde `monitoring/grafana-dashboard.yaml`. Como cambió el código de la app, hay que reconstruir las
 imágenes (`./scripts/iniciar.sh` lo hace).
+
+---
+
+## 9. Pipeline de CI/CD con Jenkins (Entrega 4)
+
+Acá cambia el destino del despliegue: ya no es minikube, es el **cluster compartido de la UCU**
+(namespace `obligatorio-grupo5`). Eso fuerza tres cambios respecto a las secciones anteriores.
+
+| Antes (minikube) | Ahora (cluster UCU) | Por qué |
+|---|---|---|
+| `minikube image load` | push a DockerHub, el cluster hace pull | el nodo remoto no ve tu Docker local |
+| `type: NodePort` | `type: ClusterIP` + `port-forward` | un nodePort es global al cluster y chocaría con otro grupo |
+| `kubectl apply -f k8s/` | `helm upgrade --install` | un solo release parametrizable en vez de 5 YAML fijos |
+
+### Qué hace el pipeline
+
+Las siete etapas están en la tabla de la sección **c. Pipeline implementado**. Lo que importa de la
+consigna: las etapas de Semgrep y Snyk corren **dos veces**, una para generar el informe completo (queda
+archivado como evidencia aunque el build pase) y otra restringida a lo crítico, que es la que decide si
+el pipeline sigue o se detiene.
+
+### Trazabilidad
+
+El tag de la imagen sale del hash del commit, no del número de build:
+
+```groovy
+env.COMMIT = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
+env.TAG_V1 = "1.2-${env.COMMIT}"
+```
+
+Así se puede ir de la imagen que corre al código que la produjo:
+
+```bash
+kubectl get deploy -n obligatorio-grupo5 -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{..image}{"\n"}{end}'
+```
+
+### El chart de Helm
+
+[`helm/calculadora/`](helm/calculadora) despliega **los dos entornos** y el Service apunta a uno solo.
+Conmutar es cambiar un valor:
+
+```bash
+helm upgrade calculadora helm/calculadora -n obligatorio-grupo5 --reuse-values --set entornoActivo=green
+```
+
+Un valor que no existe falla al renderizar, antes de tocar el cluster:
+
+```
+entornoActivo="rojo" no existe. Valores validos: blue, green
+```
+
+Ojo con la semántica: blue es la calculadora **sin raíz** y green **con raíz**, las dos en el mismo
+commit. El blue/green de acá distingue *versiones de la app*, no *releases*. Para volver a un commit
+anterior el camino es `helm rollback`, no conmutar a blue.
+
+### Tests
+
+[`tests/`](tests) tiene 23 tests sobre los endpoints. Las dos variantes se prueban en procesos separados
+porque ambas registran las mismas métricas en el registro global de `prometheus_client` y chocarían en el
+mismo intérprete:
+
+```bash
+APP_VARIANTE=v1 pytest tests/ -v
+```
+
+```bash
+APP_VARIANTE=v2 pytest tests/ -v
+```
+
+En PowerShell: `$env:APP_VARIANTE = "v1"; python -m pytest tests/ -v`.
+
+### Acceder a la app desplegada
+
+```bash
+kubectl port-forward -n obligatorio-grupo5 svc/calculadora 8080:80
+```
+
+El paso a paso de Jenkins (levantarlo, credenciales, crear el job) está en
+[`docs/06-jenkins.md`](docs/06-jenkins.md).

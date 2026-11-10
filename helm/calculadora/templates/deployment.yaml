@@ -1,0 +1,86 @@
+{{- /*
+Un Deployment por entorno (blue y green), generados con el mismo template.
+Los dos conviven en el cluster; el Service decide cual recibe trafico.
+*/ -}}
+{{- $raiz := . -}}
+{{- range $color, $cfg := .Values.entornos }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "calculadora.fullname" $raiz }}-{{ $color }}
+  labels:
+    {{- include "calculadora.labels" $raiz | nindent 4 }}
+    {{- include "calculadora.selectorLabels" $raiz | nindent 4 }}
+    version: {{ $color }}
+spec:
+  replicas: {{ $cfg.replicas }}
+  selector:
+    matchLabels:
+      {{- include "calculadora.selectorLabels" $raiz | nindent 6 }}
+      version: {{ $color }}
+  template:
+    metadata:
+      labels:
+        {{- include "calculadora.selectorLabels" $raiz | nindent 8 }}
+        version: {{ $color }}
+      {{- if $raiz.Values.metricas.habilitadas }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $raiz.Values.metricas.puerto | quote }}
+        prometheus.io/path: {{ $raiz.Values.metricas.ruta | quote }}
+      {{- end }}
+    spec:
+      # La app no usa la API de Kubernetes: no se monta el token del SA.
+      automountServiceAccountToken: false
+      # Exigido por kyverno/politicas/03-prohibir-root.yaml.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $raiz.Values.seguridad.runAsUser }}
+        runAsGroup: {{ $raiz.Values.seguridad.runAsGroup }}
+        seccompProfile:
+          type: RuntimeDefault
+      # Reparte las replicas entre nodos cuando los hay. Es "preferred" para que
+      # en un cluster de un solo nodo igual se puedan programar.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "calculadora.selectorLabels" $raiz | nindent 20 }}
+                    version: {{ $color }}
+      containers:
+        - name: {{ include "calculadora.fullname" $raiz }}
+          image: "{{ $raiz.Values.imagen.repositorio }}:{{ $cfg.tag }}"
+          imagePullPolicy: {{ $raiz.Values.imagen.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $raiz.Values.service.puertoDestino }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "calculadora.fullname" $raiz }}-config-{{ $color }}
+          # El Service solo enruta a los pods que pasan la readiness: es lo que
+          # hace seguro el switch blue/green.
+          readinessProbe:
+            httpGet:
+              path: {{ $raiz.Values.sondas.ruta }}
+              port: http
+            {{- toYaml $raiz.Values.sondas.readiness | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ $raiz.Values.sondas.ruta }}
+              port: http
+            {{- toYaml $raiz.Values.sondas.liveness | nindent 12 }}
+          resources:
+            {{- toYaml $raiz.Values.recursos | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            # La app no escribe a disco: si alguien ejecuta codigo adentro, no
+            # puede bajar ni modificar archivos.
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+{{- end }}
