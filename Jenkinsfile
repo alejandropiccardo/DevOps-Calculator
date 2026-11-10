@@ -37,7 +37,7 @@ pipeline {
     }
 
     environment {
-        IMAGEN    = 'alejandropiccardo/calculadora'
+        IMAGEN    = 'alepiccardo/calculadora'
         NAMESPACE = 'obligatorio-grupo5'
         RELEASE   = 'calculadora'
         // TAG_V1 y TAG_V2 no se pueden definir aca: se calculan a partir del

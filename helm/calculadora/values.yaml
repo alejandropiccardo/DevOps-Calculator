@@ -3,7 +3,7 @@ nombreApp: calculadora
 imagen:
   # El cluster de la UCU baja la imagen de un registry publico: ya no sirve
   # "minikube image load".
-  repositorio: alejandropiccardo/calculadora
+  repositorio: alepiccardo/calculadora
   pullPolicy: IfNotPresent
 
 # A que entorno apunta el Service. Cambiarlo es TODO el despliegue blue/green:

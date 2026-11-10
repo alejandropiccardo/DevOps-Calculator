@@ -157,7 +157,7 @@ camino es directo y en los dos sentidos:
 kubectl get deploy calculadora-green -n obligatorio-grupo5 -o jsonpath='{..image}'
 ```
 
-Eso devuelve `alejandropiccardo/calculadora:2.2-a1b2c3d`, y `git show a1b2c3d` es el código exacto.
+Eso devuelve `alepiccardo/calculadora:2.2-a1b2c3d`, y `git show a1b2c3d` es el código exacto.
 De paso, volver a correr el pipeline sobre el mismo commit produce el mismo tag: mismo código,
 misma imagen, en vez de una versión nueva que no cambió nada.
 
