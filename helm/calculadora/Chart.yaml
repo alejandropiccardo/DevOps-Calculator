@@ -1,0 +1,9 @@
+apiVersion: v2
+name: calculadora
+description: Calculadora API con despliegue blue/green conmutable
+type: application
+# version: la del chart. appVersion: la version de la app que sirve por defecto.
+version: 1.0.0
+appVersion: "2.2"
+maintainers:
+  - name: Grupo 5 - DevOps UCU

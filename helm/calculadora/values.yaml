@@ -1,0 +1,59 @@
+nombreApp: calculadora
+
+imagen:
+  # El cluster de la UCU baja la imagen de un registry publico: ya no sirve
+  # "minikube image load".
+  repositorio: alejandropiccardo/calculadora
+  pullPolicy: IfNotPresent
+
+# A que entorno apunta el Service. Cambiarlo es TODO el despliegue blue/green:
+#   helm upgrade calculadora ./helm/calculadora --set entornoActivo=green
+entornoActivo: blue
+
+# Los dos entornos conviven en el cluster. El pipeline sobrescribe los tags con
+# el numero de build (--set entornos.blue.tag=...).
+entornos:
+  blue:
+    tag: "1.2"
+    appVersion: "1.2"
+    replicas: 2
+  green:
+    tag: "2.2"
+    appVersion: "2.2"
+    replicas: 2
+
+service:
+  # ClusterIP por defecto: el cluster de la UCU es compartido entre grupos y un
+  # nodePort fijo chocaria con otro equipo. Para acceder se usa port-forward.
+  tipo: ClusterIP
+  puerto: 80
+  puertoDestino: 8000
+  # nodePort: 30080   # solo tiene efecto si tipo es NodePort
+
+recursos:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+# Anotaciones para que Prometheus descubra los pods (ver monitoring/prometheus.yaml).
+metricas:
+  habilitadas: true
+  puerto: "8000"
+  ruta: /metrics
+
+sondas:
+  ruta: /health
+  readiness:
+    initialDelaySeconds: 3
+    periodSeconds: 5
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# Valores exigidos por las politicas de Kyverno (kyverno/politicas/).
+seguridad:
+  runAsUser: 10001
+  runAsGroup: 10001

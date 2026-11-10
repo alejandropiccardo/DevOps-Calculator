@@ -1,0 +1,29 @@
+{{- /*
+Unico punto de entrada estable. El despliegue blue/green se reduce a cambiar
+spec.selector.version, que sale de .Values.entornoActivo.
+*/ -}}
+{{- if not (hasKey .Values.entornos .Values.entornoActivo) }}
+{{- fail (printf "entornoActivo=%q no existe. Valores validos: %s" .Values.entornoActivo (keys .Values.entornos | sortAlpha | join ", ")) }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "calculadora.fullname" . }}
+  labels:
+    {{- include "calculadora.labels" . | nindent 4 }}
+  annotations:
+    # Deja asentado en el cluster que entorno esta activo, para poder
+    # verificarlo con kubectl sin mirar los values del release.
+    calculadora/entorno-activo: {{ .Values.entornoActivo | quote }}
+spec:
+  type: {{ .Values.service.tipo }}
+  selector:
+    {{- include "calculadora.selectorLabels" . | nindent 4 }}
+    version: {{ .Values.entornoActivo }}
+  ports:
+    - name: http
+      port: {{ .Values.service.puerto }}
+      targetPort: {{ .Values.service.puertoDestino }}
+      {{- if and (eq .Values.service.tipo "NodePort") .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}

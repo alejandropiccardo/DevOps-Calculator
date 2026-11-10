@@ -1,0 +1,24 @@
+# Levanta Jenkins:  cd jenkins && docker compose up -d --build
+# UI:               http://localhost:8081
+services:
+  jenkins:
+    build: .
+    image: jenkins-devops:lts
+    container_name: jenkins
+    restart: unless-stopped
+    ports:
+      # 8081 en el host: el 8080 se usa para el port-forward de la calculadora.
+      - "8081:8080"
+      # Puerto para agentes. No se usa aca (todo corre en el controlador),
+      # pero se deja expuesto por si despues se agrega un agente.
+      - "50000:50000"
+    volumes:
+      # Los datos de Jenkins viven en un volumen con nombre: sobreviven a
+      # "docker compose down" y a reconstrucciones de la imagen.
+      - jenkins_home:/var/jenkins_home
+      # Socket del Docker del host: permite construir y publicar imagenes.
+      # La doble barra inicial es necesaria en Git Bash / Windows.
+      - //var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  jenkins_home:

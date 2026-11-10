@@ -57,3 +57,13 @@ temp/
 # Sacar estas lineas si se quiere versionarlos junto al codigo.
 *.pptx
 *.pdf
+
+# ---- Jenkins / CI ----
+.venv/
+reports/junit-*.xml
+reports/semgrep-ci.txt
+reports/snyk-ci.txt
+reports/smoke-test.txt
+# kubeconfigs: NUNCA versionar (traen token de acceso al cluster)
+grupo5.yaml
+ucu.yaml

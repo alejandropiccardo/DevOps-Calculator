@@ -1,0 +1,19 @@
+{{- /*
+Un ConfigMap por entorno. Los valores se inyectan como variables de ambiente
+(envFrom) para no hardcodearlos en el codigo de la app.
+*/ -}}
+{{- $raiz := . -}}
+{{- range $color, $cfg := .Values.entornos }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "calculadora.fullname" $raiz }}-config-{{ $color }}
+  labels:
+    {{- include "calculadora.labels" $raiz | nindent 4 }}
+    {{- include "calculadora.selectorLabels" $raiz | nindent 4 }}
+    version: {{ $color }}
+data:
+  APP_VERSION: {{ $cfg.appVersion | quote }}
+  APP_COLOR: {{ $color | quote }}
+{{- end }}
