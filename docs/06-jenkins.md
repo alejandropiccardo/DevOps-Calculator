@@ -261,6 +261,12 @@ dependencias del primero que falló. Se arregla subiendo el `FROM` del
 docker logs jenkins 2>&1 | grep "or higher required"
 ```
 
+**`endpointslices.discovery.k8s.io is forbidden` en la etapa 6.** El despliegue salio bien; lo que
+falla es el comando de diagnostico que sigue. El ServiceAccount del grupo no tiene permisos sobre
+`discovery.k8s.io`, pero si sobre la API vieja `endpoints` (core/v1), que da la misma informacion.
+La etapa usa esa, y ademas con `|| true`: un despliegue correcto no puede quedar en rojo porque
+falte un permiso de lectura.
+
 **`docker: permission denied` en la etapa 5.** El contenedor tiene que correr como root para
 escribir en el socket del host. Es lo que hace el `Dockerfile` (`USER root`) y es aceptable en un
 laboratorio local; en producción se usaría un agente dedicado en el grupo `docker`, no el

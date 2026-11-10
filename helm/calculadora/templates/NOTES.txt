@@ -9,7 +9,7 @@ Los dos entornos estan desplegados; el Service apunta solo a uno.
     kubectl get pods -n {{ .Release.Namespace }} -l app={{ include "calculadora.fullname" . }} -L version
 
   Ver a cuales manda trafico el Service:
-    kubectl get endpointslice -n {{ .Release.Namespace }} -l kubernetes.io/service-name={{ include "calculadora.fullname" . }}
+    kubectl get endpoints {{ include "calculadora.fullname" . }} -n {{ .Release.Namespace }} -o wide
 
   Acceder a la app:
     kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "calculadora.fullname" . }} 8080:{{ .Values.service.puerto }}

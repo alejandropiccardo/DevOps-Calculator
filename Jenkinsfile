@@ -227,9 +227,21 @@ pipeline {
                         echo "--- Estado del despliegue ---"
                         kubectl get deployments,pods,svc -n "$NAMESPACE" -l app=calculadora -L version
                         echo ""
-                        echo "--- Endpoints activos (a que entorno enruta el Service) ---"
-                        kubectl get endpointslice -n "$NAMESPACE" \
-                            -l kubernetes.io/service-name=calculadora -o wide
+                        echo "--- A que entorno enruta el Service ---"
+                        # Se usa la API core/v1 "endpoints" y no "endpointslices":
+                        # el ServiceAccount del grupo no tiene permisos sobre
+                        # discovery.k8s.io. Y va con "|| true" porque esto es
+                        # diagnostico: un despliegue correcto no puede quedar en
+                        # rojo porque falte un permiso de lectura.
+                        kubectl get svc calculadora -n "$NAMESPACE" \
+                            -o jsonpath='{.spec.selector}' || true
+                        echo ""
+                        kubectl get endpoints calculadora -n "$NAMESPACE" -o wide || true
+                        echo ""
+                        echo "(las IPs de arriba deben ser las de los pods $ENTORNO_ACTIVO)"
+                        kubectl get pods -n "$NAMESPACE" \
+                            -l "app=calculadora,version=$ENTORNO_ACTIVO" \
+                            -o wide || true
                     '''
                 }
             }
