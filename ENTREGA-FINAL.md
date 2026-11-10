@@ -108,15 +108,146 @@ $ curl "http://127.0.0.1:18081/suma?a=2&b=3"
 
 ### 3.a Pipeline en Jenkins
 
+Jenkins corre en un contenedor construido a partir de [`jenkins/Dockerfile`](jenkins/Dockerfile),
+sobre la imagen `jenkins/jenkins:2.541.3-lts-jdk17`, con Docker CLI, kubectl v1.29.5, Helm 3.16.3,
+Semgrep, Snyk y pytest instalados adentro. Se levanta con `docker compose up -d --build` desde la
+carpeta `jenkins/` y queda disponible en `http://localhost:8081`.
+
+Las herramientas van **dentro de la imagen** y no como contenedores aparte por una razón concreta:
+Jenkins usa el socket Docker del host, así que un `docker run -v $(pwd):/src` resolvería la ruta
+contra el filesystem del host y no contra el workspace, y el escaneo correría sobre una carpeta
+vacía. El socket se usa solo para `docker build` y `docker push`, que sí funcionan porque el CLI
+lee el contexto y se lo manda al daemon.
+
+El job `Calculadora-DevOps` es de tipo Pipeline, definido como *Pipeline script from SCM* apuntando
+a la rama `main` del repositorio y al `Jenkinsfile` de la raíz. Toma tres credenciales, cargadas en
+el almacén de Jenkins y referenciadas por ID:
+
+| ID | Tipo | Uso |
+|---|---|---|
+| `dockerhub` | Username with password | publicar las imágenes |
+| `snyk-token` | Secret text | autenticar el escaneo de dependencias |
+| `kubeconfig-ucu` | Secret file | desplegar en el cluster de la UCU |
+
+El kubeconfig no se versiona: contiene un token de acceso real al cluster y está en el `.gitignore`.
+Jenkins lo escribe en un archivo temporal durante la etapa y lo borra al salir del bloque.
+
+El disparo es **manual** (*Build with Parameters*), con dos parámetros:
+
+| Parámetro | Para qué |
+|---|---|
+| `ENTORNO_ACTIVO` | `blue` (v1) o `green` (v2): a cuál apunta el Service al terminar |
+| `DESPLEGAR` | desmarcado corre solo CI, sin tocar el cluster compartido |
+
 ### 3.b Etapas del pipeline
 
 <img width="1568" height="324" alt="image" src="https://github.com/user-attachments/assets/ca076e1c-6eed-4ccd-893d-cd1ece420d26" />
 
+| # | Etapa | Herramienta | Detiene el pipeline si |
+|---|---|---|---|
+| 1 | Clonar repositorio | git | no puede clonar |
+| 2 | Análisis estático | Semgrep | hay hallazgos de severidad `ERROR` |
+| 3 | Dependencias | Snyk | hay vulnerabilidades críticas |
+| 4 | Construcción y test | pytest | falla algún test |
+| 5 | Imagen Docker | docker | falla el build o el push |
+| 6 | Despliegue | Helm | el rollout no queda listo en 5 minutos |
+| 7 | Smoke test | kubectl + curl | el Service no responde |
+
+Las etapas 6 y 7 están condicionadas por el parámetro `DESPLEGAR`.
+
 ### 3.c Jenkinsfile
+
+El pipeline es declarativo y está en [`Jenkinsfile`](Jenkinsfile), en la raíz del repositorio.
+
+El tag de las imágenes sale del **hash del commit**, no del número de build, para poder rastrear en
+los dos sentidos qué código está corriendo en el cluster:
+
+```groovy
+env.COMMIT = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
+env.TAG_V1 = "${env.VERSION_V1}-${env.COMMIT}"
+```
+
+`VERSION_V1` y `VERSION_V2` se declaran una sola vez en el bloque `environment` y alimentan tanto el
+tag de la imagen como el `APP_VERSION` que la aplicación reporta por la API, de modo que no puedan
+desincronizarse.
+
+Comprobación de la trazabilidad sobre el despliegue real:
+
+```
+DEPLOY              IMAGEN
+calculadora-blue    alepiccardo/calculadora:1.2-5dc826e
+calculadora-green   alepiccardo/calculadora:2.2-5dc826e
+```
 
 ### 3.d Ejecución y registros de cada fase
 
+Cada etapa escribe su salida en la consola del build, con marca de tiempo (`timestamps()`). Además
+quedan archivados como artefactos del build mediante `archiveArtifacts`:
+
+| Artefacto | Contenido |
+|---|---|
+| `reports/semgrep-ci.txt` | informe completo de Semgrep, todas las severidades |
+| `reports/snyk-ci.txt` | informe completo de dependencias de v1 y v2 |
+| `reports/junit-v1.xml`, `reports/junit-v2.xml` | resultados de los tests |
+| `reports/smoke-test.txt` | respuesta del Service desde dentro del cluster |
+
+Los resultados de los tests se publican además con el paso `junit`, así que aparecen en la pestaña
+*Test Result* del build con el detalle test por test.
+
+Resultados medidos en el build #6, que terminó en verde:
+
+| Etapa | Resultado |
+|---|---|
+| Semgrep (informe) | 258 reglas sobre 20 archivos, 0 hallazgos |
+| Semgrep (corte) | 107 reglas de severidad `ERROR`, 0 hallazgos |
+| Snyk | 15 dependencias por variante, 0 vulnerabilidades |
+| pytest | v2: 22 pasados; v1: 21 pasados y 1 omitido (la raíz no existe en v1) |
+| Imágenes | `1.2-5dc826e` y `2.2-5dc826e` publicadas en DockerHub |
+| Helm | release `calculadora` instalado, 4 pods `Running` |
+| Smoke test | el Service responde desde dentro del cluster |
+
 ### 3.e Detención ante vulnerabilidades críticas
+
+Las etapas 2 y 3 ejecutan cada herramienta **dos veces**, con dos propósitos distintos:
+
+1. Un informe completo, con todas las severidades, que se guarda como evidencia y **no** corta el
+   pipeline (se encierra entre `set +e` y `set -e`).
+2. Una corrida restringida a lo crítico, cuyo código de salida sí decide si el pipeline continúa.
+
+Semgrep:
+
+```
+semgrep scan --config ... --severity ERROR --error app k8s monitoring helm
+```
+
+`--error` hace que Semgrep salga con código distinto de cero si encuentra algo, y `--severity ERROR`
+limita el corte a los hallazgos críticos.
+
+Snyk:
+
+```
+snyk test --file=app/v1/requirements.txt --package-manager=pip --severity-threshold=critical
+```
+
+Snyk sale con código 1 si encuentra alguna vulnerabilidad en el umbral indicado o por encima.
+
+Cuando una de las dos corta, Jenkins marca la etapa en rojo, **omite todas las etapas siguientes** y
+el bloque `post { failure { ... } }` indica dónde está el detalle. Al no llegar a la etapa 5 no se
+construye ni publica ninguna imagen, y al no llegar a la 6 el cluster no se toca: el código con una
+vulnerabilidad crítica no puede llegar a ejecutarse.
+
+Así se vio en una ejecución real en la que la etapa 3 falló:
+
+```
+[Pipeline] { (4. Construccion y test)
+Stage "4. Construccion y test" skipped due to earlier failure(s)
+[Pipeline] { (5. Imagen Docker)
+Stage "5. Imagen Docker" skipped due to earlier failure(s)
+[Pipeline] { (6. Despliegue con Helm)
+Stage "6. Despliegue con Helm" skipped due to earlier failure(s)
+```
+
+El mismo mecanismo aplica a los tests de la etapa 4: si un test falla, no se publica la imagen.
 
 ---
 
@@ -307,7 +438,20 @@ Grafana y controles de seguridad en el código, la imagen, el cluster y la ejecu
 
 ### 6.c Pipeline implementado
 
-<!-- SECCIÓN LIBRE: la completa el compañero a cargo de Jenkins. -->
+Pipeline declarativo de Jenkins ([`Jenkinsfile`](Jenkinsfile)) de siete etapas, descrito en detalle
+en la sección 3. Clona el repositorio, analiza el código con Semgrep, escanea las dependencias con
+Snyk, corre 23 tests sobre las dos variantes, construye y publica las imágenes en DockerHub usando
+el hash del commit como tag, despliega en el cluster de la UCU con Helm y verifica el resultado con
+un smoke test desde dentro del cluster.
+
+Las etapas de Semgrep y Snyk detienen la ejecución ante hallazgos críticos, de modo que el código
+vulnerable no llega a construirse ni a desplegarse. Los informes completos quedan archivados como
+artefactos del build aunque este pase.
+
+El despliegue mantiene la estrategia blue/green de la sección 2: el chart deja los dos entornos
+corriendo y el parámetro `ENTORNO_ACTIVO` decide a cuál apunta el Service. La aplicación queda
+publicada en `https://calculadora-grupo5.reto-ucu.net` mediante un Ingress sobre el gateway APISIX
+del cluster.
 
 ### 6.d Métricas y dashboard de Grafana
 
@@ -332,6 +476,12 @@ Ver la sección 4. El dashboard exportado se adjunta en `grafana/dashboard.json`
 | `minikube image load` no reemplaza un tag existente y quedaba la imagen vieja | Borrar el tag dentro de minikube antes de cargar                              |
 | Las consultas de CPU y memoria volvían vacías                                 | cAdvisor no publica el label `container` en este entorno: se filtra por `pod` |
 | Una URL inventada podía crear series nuevas en Prometheus                     | El label `path` usa la ruta declarada, con `no_encontrada` como respaldo      |
+| Los 26 plugins sugeridos de Jenkins fallaban en cascada al instalarse         | La causa era una sola línea del log: `Jenkins 2.516.3 or higher required`. Se subió la imagen base a `2.541.3-lts-jdk17` |
+| Snyk fallaba con `Failed to test pip project`, sin más detalle                | Con `-d` salían dos causas encadenadas: el plugin invoca `python` (la imagen solo trae `python3`) y resuelve el árbol leyendo los paquetes **instalados**. Se crea un venv por variante y se le pasa con `--command` |
+| El push a DockerHub daba `insufficient_scope: authorization failed`           | No era la credencial: el namespace del repositorio era `alepiccardo`, no `alejandropiccardo` |
+| La etapa de Helm se quedaba 5 minutos y moría en el timeout                   | La `ResourceQuota` del namespace topea `requests.cpu` en 200m y los 4 pods a 50m la llenaban exacto, así que ningún rolling update podía crear el pod nuevo. Se bajó a 25m y se fijó `maxSurge: 0` |
+| La etapa 6 fallaba aunque el despliegue terminara bien                        | El comando de diagnóstico usaba `endpointslices`, sobre el que el ServiceAccount no tiene permisos. Se cambió a la API `endpoints`, y el comando se volvió tolerante a fallos: un diagnóstico no debe tumbar un despliegue correcto |
+| Por HTTP la URL pública devolvía 200 con una página ajena al cluster          | El gateway sirve la aplicación por HTTPS; el puerto 80 de esa misma IP lo atiende otro servicio |
 
 ### 6.g Conclusiones y oportunidades de mejora
 
@@ -340,6 +490,17 @@ los manifiestos, Trivy la imagen base y Kyverno impide que esas fallas vuelvan a
 
 Como mejoras quedan guardar la clave de Grafana en un gestor de secretos, dar almacenamiento persistente a
 Prometheus y agregar Alertmanager para que las alertas lleguen a alguien.
+
+Del pipeline quedan tres mejoras identificadas:
+
+- **Tag por contenido de cada carpeta.** Hoy el tag sale del commit global, así que un cambio en `app/v2/`
+  también le cambia el tag a la imagen de v1 aunque su contenido sea idéntico, y eso reinicia los pods de
+  v1 sin necesidad. Taggear por el hash del contenido de cada carpeta lo evitaría.
+- **Disparo automático.** El build es manual a propósito, pero un webhook de GitHub no alcanzaría porque
+  GitHub no puede llegar a `localhost`. Haría falta exponer Jenkins o usar `pollSCM`.
+- **Monitoreo en el cluster de la UCU.** Prometheus y Grafana corren en minikube. Llevarlos al cluster
+  remoto exigiría targets estáticos en vez de autodescubrimiento, porque el ServiceAccount del grupo no
+  puede crear `Role` ni `RoleBinding`.
 
 ---
 
@@ -355,7 +516,13 @@ Prometheus y agregar Alertmanager para que las alertas lleguen a alguien.
 | `scripts/abrir-monitoreo.sh`     | Expone Grafana y Prometheus en localhost                              |
 | `scripts/limpiar.sh`             | Borra todos los recursos (`--todo` borra también minikube)            |
 
-<!-- El compañero a cargo de Jenkins agrega acá el script que inicia Jenkins. -->
+Jenkins no usa un script propio: se levanta con Docker Compose desde la carpeta `jenkins/`, que construye
+la imagen con todas las herramientas adentro y publica la interfaz en `http://localhost:8081`.
+
+| Archivo | Función |
+| --- | --- |
+| `jenkins/docker-compose.yml` | `docker compose up -d --build` levanta Jenkins; `down` lo apaga |
+| `jenkins/Dockerfile` | Imagen con Docker CLI, kubectl, Helm, Semgrep, Snyk y pytest |
 
 ### c) Documentación paso a paso
 
@@ -363,5 +530,6 @@ Prometheus y agregar Alertmanager para que las alertas lleguen a alguien.
 | ---------- | ----------------------- |
 | Docker     | `docs/01-docker.md`     |
 | Kubernetes | `docs/02-kubernetes.md` |
+| Jenkins    | `docs/06-jenkins.md`    |
 | Monitoreo  | `docs/04-monitoreo.md`  |
 | Seguridad  | `docs/05-seguridad.md`  |
